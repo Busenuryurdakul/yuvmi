@@ -1,0 +1,68 @@
+import type { LifeDomain, SpaceType } from "../types";
+
+export const APP_NAME = "Yuvmi";
+
+export const APP_TAGLINE = "Bugününü gör. Gelecekteki kendine yaklaş.";
+
+export const APP_MANIFESTO = "Bugünkü seni keşfet. Gelecekteki seni inşa et.";
+
+export const LIFE_DOMAINS: Record<
+  LifeDomain,
+  { label: { tr: string; en: string }; emoji: string }
+> = {
+  career: { label: { tr: "Kariyer", en: "Career" }, emoji: "💼" },
+  relationships: { label: { tr: "İlişkiler", en: "Relationships" }, emoji: "💕" },
+  health: { label: { tr: "Sağlık", en: "Health" }, emoji: "🌿" },
+  finance: { label: { tr: "Finans", en: "Finance" }, emoji: "💰" },
+  personal_growth: { label: { tr: "Kişisel Gelişim", en: "Personal Growth" }, emoji: "🌱" },
+  creativity: { label: { tr: "Yaratıcılık", en: "Creativity" }, emoji: "🎨" },
+  peace: { label: { tr: "Huzur", en: "Peace" }, emoji: "🕊️" },
+  freedom: { label: { tr: "Özgürlük", en: "Freedom" }, emoji: "✨" },
+};
+
+export const SPACE_TYPES: Record<
+  SpaceType,
+  { label: { tr: string; en: string }; description: { tr: string; en: string } }
+> = {
+  personal: {
+    label: { tr: "Kişisel", en: "Personal" },
+    description: {
+      tr: "Sadece senin için — bugünün ve gelecekteki halinin yolculuğu",
+      en: "Just for you — your journey from today to your future self",
+    },
+  },
+  couple: {
+    label: { tr: "Sevgililer", en: "Couple" },
+    description: {
+      tr: "İkinizin ortak vizyonu, uyumluluk ve birlikte büyüme",
+      en: "Shared vision, compatibility, and growing together",
+    },
+  },
+  friends: {
+    label: { tr: "Arkadaşlar", en: "Friends" },
+    description: {
+      tr: "Arkadaşlarınla ilerlemeni paylaş, birbirinizi destekleyin",
+      en: "Share progress with friends and support each other",
+    },
+  },
+  family: {
+    label: { tr: "Aile", en: "Family" },
+    description: {
+      tr: "Aile üyelerinle ortak hedefler ve bağ",
+      en: "Shared goals and connection with family",
+    },
+  },
+};
+
+/** Features available per space type */
+export const SPACE_FEATURES_BY_TYPE: Record<SpaceType, string[]> = {
+  personal: ["shared_vision_board", "dream_journal", "private_notes"],
+  couple: [
+    "shared_vision_board",
+    "compatibility_insights",
+    "joint_affirmations",
+    "progress_comparison",
+  ],
+  friends: ["progress_comparison", "joint_affirmations"],
+  family: ["shared_vision_board", "progress_comparison"],
+};

@@ -1,0 +1,17 @@
+# Default reviewers for PRs — update GitHub usernames below
+* @Busenuryurdakul
+
+# Shared types affect both clients — both should review
+/packages/shared/ @Busenuryurdakul
+
+# Product/architecture decisions — both should review  
+/docs/ @Busenuryurdakul
+
+# Web app
+/apps/web/ @Busenuryurdakul
+
+# Mobile app
+/apps/mobile/ @Busenuryurdakul
+
+# Backend (when added)
+/apps/api/ @Busenuryurdakul
