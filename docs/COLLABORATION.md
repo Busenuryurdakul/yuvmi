@@ -2,8 +2,8 @@
 
 Bu doküman Yuvmi'nin **2 geliştirici** ile nasıl branch ve PR yöneteceğini tanımlar.
 
-> Repo sahibi: [`Busenuryurdakul/yumvi`](https://github.com/Busenuryurdakul/yumvi)  
-> İkinci geliştirici: GitHub'da **Collaborator** olarak eklenmeli (Settings → Collaborators).
+> Repo sahibi: [`Busenuryurdakul`](https://github.com/Busenuryurdakul) — Buse Nur Yurdakul  
+> Proje arkadaşı: [`ayse-solmaz`](https://github.com/ayse-solmaz) — Ayşe Solmaz (collaborator daveti gönderildi)
 
 ---
 
@@ -37,20 +37,20 @@ Format:
 <tür>/<geliştirici-kısa-adı>-<konu>
 ```
 
-| Geliştirici | Kısa ad (öneri) | Alanlar |
-|-------------|-----------------|---------|
-| Repo sahibi | `busenur` | *(GitHub kullanıcı adına göre güncelle)* |
-| Proje arkadaşı | `partner` | *(kendi kısa adını seç — örn. `ahmet`)* |
+| Geliştirici | Kısa ad | GitHub | Alanlar |
+|-------------|---------|--------|---------|
+| Buse Nur | `busenur` | `@Busenuryurdakul` | Web, backend (Phase 1) |
+| Ayşe Solmaz | `ayse` | `@ayse-solmaz` | Mobil, shared review |
 
 ### Örnekler
 
 ```
 feat/busenur-foundation-hardening   ← Phase 0 işi
-feat/partner-mobile-onboarding      ← mobil onboarding
+feat/ayse-mobile-onboarding         ← mobil onboarding
 feat/busenur-api-scaffold           ← Go API iskeleti
-fix/partner-alignment-score         ← hizalanma bugfix
+fix/ayse-alignment-score            ← hizalanma bugfix
 docs/busenur-collaboration          ← bu doküman
-chore/partner-ci-setup              ← GitHub Actions
+chore/ayse-ci-setup                 ← GitHub Actions
 ```
 
 **Kurallar:**
@@ -64,10 +64,10 @@ chore/partner-ci-setup              ← GitHub Actions
 
 | Alan | Dizin | Birincil sorumlu (örnek) |
 |------|-------|--------------------------|
-| Web | `apps/web/` | Geliştirici A |
-| Mobil | `apps/mobile/` | Geliştirici B |
+| Web | `apps/web/` | Buse (`busenur`) |
+| Mobil | `apps/mobile/` | Ayşe (`ayse`) |
 | Shared tipler | `packages/shared/` | **İkisi de** — PR zorunlu, küçük PR |
-| Backend (Go) | `apps/api/` *(henüz yok)* | Geliştirici A veya B — Phase 1'de netleştir |
+| Backend (Go) | `apps/api/` *(henüz yok)* | Buse veya Ayşe — Phase 1'de netleştir |
 | Ürün / mimari | `docs/` | **İkisi de** — kararları PR açıklamasında yaz |
 
 Shared veya `docs/PRODUCT.md` değişecekse **önce kısa mesajla haberleş**, ardından PR aç.
@@ -86,7 +86,7 @@ git pull origin main
 ### 2. Yeni iş için branch
 
 ```bash
-git checkout -b feat/partner-mobile-onboarding
+git checkout -b feat/ayse-mobile-onboarding
 ```
 
 ### 3. Commit
