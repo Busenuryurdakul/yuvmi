@@ -198,6 +198,24 @@ export type SpaceResponse = {
   updatedAt: string;
 };
 
+export type AssetResponse = {
+  id: string;
+  ownerId: string;
+  spaceId?: string;
+  type: "image" | "document";
+  title: string;
+  mimeType: string;
+  fileSize: number;
+  url?: string;
+  visibility: "private" | "space_members" | "specific_members";
+  revokedFromSpaceAt?: string;
+  granteeIds?: string[];
+  isOwner: boolean;
+  aiProcessingAllowed: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type PremiumLimitsResponse = {
   maxGoals: number;
   maxSpaces: number;

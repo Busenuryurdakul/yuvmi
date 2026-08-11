@@ -203,61 +203,6 @@ func (s *Service) GetAssetContent(ctx context.Context, userID, assetID uuid.UUID
 	return rc, asset.MimeType, nil
 }
 
-func (s *Service) OpenAssetContent(ctx context.Context, userID uuid.UUID, storageKey string) (io.ReadCloser, string, error) {
-	if s.storage == nil {
-		return nil, "", domainErr.New(domainErr.ErrInternal, "storage not configured", nil)
-	}
-	// storage key is scoped per user path; lookup by key prefix owner check via DB would be better
-	// For security, find asset by storage key through owner or permission
-	items, err := s.assets.ListByOwner(ctx, userID, 500)
-	if err == nil {
-		for _, a := range items {
-			if a.StorageKey == storageKey {
-				rc, err := s.storage.Open(ctx, storageKey)
-				return rc, a.MimeType, err
-			}
-		}
-	}
-	rc, err := s.storage.Open(ctx, storageKey)
-	if err != nil {
-		return nil, "", domainErr.New(domainErr.ErrNotFound, "file not found", err)
-	}
-	return rc, "application/octet-stream", nil
-}
-
-func (s *Service) CanAccessAssetFile(ctx context.Context, userID uuid.UUID, storageKey string) (bool, string, error) {
-	// Walk: owned assets
-	if ownerAssets, err := s.assets.ListByOwner(ctx, userID, 500); err == nil {
-		for _, a := range ownerAssets {
-			if a.StorageKey == storageKey {
-				return true, a.MimeType, nil
-			}
-		}
-	}
-	// Shared: brute scan visible in user's spaces — for MVP match key in shared assets
-	// Better: GetByStorageKey repo method — add quick query
-	return s.canAccessSharedAssetKey(ctx, userID, storageKey)
-}
-
-func (s *Service) canAccessSharedAssetKey(ctx context.Context, userID uuid.UUID, storageKey string) (bool, string, error) {
-	spaces, err := s.spaces.ListByUserID(ctx, userID)
-	if err != nil {
-		return false, "", err
-	}
-	for _, sp := range spaces {
-		items, err := s.assets.ListVisibleInSpace(ctx, sp.ID, userID)
-		if err != nil {
-			continue
-		}
-		for _, a := range items {
-			if a.StorageKey == storageKey {
-				return true, a.MimeType, nil
-			}
-		}
-	}
-	return false, "", nil
-}
-
 func (s *Service) requireAssetAccess(ctx context.Context, userID uuid.UUID, asset *assetmodel.Asset) error {
 	if asset.OwnerID == userID {
 		return nil
@@ -292,13 +237,6 @@ func (s *Service) toAssetResponse(a *assetmodel.Asset, viewerID uuid.UUID) *dto.
 		resp.URL = "/api/v1/assets/" + a.ID.String() + "/content"
 	}
 	return resp
-}
-
-func (s *Service) fileURL(storageKey string) string {
-	if s.storage == nil {
-		return ""
-	}
-	return s.storage.PublicURL(storageKey)
 }
 
 func classifyUpload(contentType, filename string, size int64) (assetmodel.AssetType, error) {

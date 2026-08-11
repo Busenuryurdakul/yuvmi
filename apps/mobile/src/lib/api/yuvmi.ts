@@ -1,8 +1,9 @@
-import { apiRequest } from "./client";
+import { apiRequest, apiUpload } from "./client";
+import { getApiBaseUrl } from "./config";
 import type {
   AlignmentResponse,
-  CheckinResponse,
-  DailyTaskResponse,
+  AssetResponse,
+  CheckinResponse,  DailyTaskResponse,
   FutureSelfResponse,
   GoalResponse,
   LoginResponse,
@@ -273,6 +274,57 @@ export async function leaveSpace(token: string, spaceId: string) {
     method: "POST",
     body: {},
   });
+}
+
+export async function fetchMyAssets(token: string) {
+  return apiRequest<AssetResponse[]>("/api/v1/assets", { token });
+}
+
+export async function fetchSpaceAssets(token: string, spaceId: string) {
+  return apiRequest<AssetResponse[]>(`/api/v1/spaces/${spaceId}/assets`, { token });
+}
+
+export async function fetchAsset(token: string, assetId: string) {
+  return apiRequest<AssetResponse>(`/api/v1/assets/${assetId}`, { token });
+}
+
+export async function uploadAsset(
+  token: string,
+  file: { uri: string; name: string; type: string },
+  title?: string,
+) {
+  const form = new FormData();
+  form.append("file", { uri: file.uri, name: file.name, type: file.type } as unknown as Blob);
+  if (title) form.append("title", title);
+  return apiUpload<AssetResponse>("/api/v1/assets/upload", token, form);
+}
+
+export async function shareAsset(
+  token: string,
+  assetId: string,
+  body: {
+    visibility: "private" | "space_members" | "specific_members";
+    spaceId?: string;
+    granteeIds?: string[];
+  },
+) {
+  return apiRequest<AssetResponse>(`/api/v1/assets/${assetId}/share`, {
+    token,
+    method: "PATCH",
+    body,
+  });
+}
+
+export async function revokeAssetFromSpace(token: string, assetId: string) {
+  return apiRequest<AssetResponse>(`/api/v1/assets/${assetId}/revoke-from-space`, {
+    token,
+    method: "POST",
+    body: {},
+  });
+}
+
+export function assetContentUrl(asset: AssetResponse) {
+  return asset.url ? `${getApiBaseUrl()}${asset.url}` : "";
 }
 
 export async function fetchSubscription(token: string) {

@@ -18,6 +18,8 @@ export default function RootLayout() {
           <Stack.Screen name="check-in" options={{ presentation: "modal" }} />
           <Stack.Screen name="task/[id]" />
           <Stack.Screen name="alignment" />
+          <Stack.Screen name="archive" />
+          <Stack.Screen name="asset/[id]" />
           <Stack.Screen name="spaces/[id]" />
           <Stack.Screen name="spaces/invite" />
           <Stack.Screen name="weekly-review" />

@@ -1,6 +1,5 @@
 import { getApiBaseUrl } from "./config";
 import type { ApiErrorBody } from "./types";
-
 export class ApiError extends Error {
   code: number;
 
@@ -49,5 +48,35 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     return payload.data as T;
   }
 
+  return payload as T;
+}
+
+export async function apiUpload<T>(
+  path: string,
+  token: string,
+  formData: FormData,
+): Promise<T> {
+  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  const text = await response.text();
+  const payload = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+
+  if (!response.ok) {
+    const err = payload as ApiErrorBody;
+    const message =
+      err.error?.message ?? err.message ?? `İstek başarısız (${response.status})`;
+    throw new ApiError(message, err.error?.code ?? response.status);
+  }
+
+  if ("data" in payload) {
+    return payload.data as T;
+  }
   return payload as T;
 }

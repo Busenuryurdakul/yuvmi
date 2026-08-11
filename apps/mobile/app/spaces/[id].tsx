@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { SPACE_TYPES, type SpaceType } from "@yuvmi/shared";
 import { Screen } from "@/components/ui/Screen";
@@ -8,8 +8,8 @@ import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { useAuth } from "@/context/AuthContext";
-import { fetchSpace, leaveSpace } from "@/lib/api/yuvmi";
-import type { SpaceResponse } from "@/lib/api/types";
+import { assetContentUrl, fetchSpace, fetchSpaceAssets, leaveSpace } from "@/lib/api/yuvmi";
+import type { AssetResponse, SpaceResponse } from "@/lib/api/types";
 import { theme } from "@/theme";
 
 const statusLabel: Record<string, string> = {
@@ -23,12 +23,16 @@ export default function SpaceDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const [space, setSpace] = useState<SpaceResponse | null>(null);
+  const [assets, setAssets] = useState<AssetResponse[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user?.token || !id) return;
-    fetchSpace(user.token, id)
-      .then(setSpace)
+    Promise.all([fetchSpace(user.token, id), fetchSpaceAssets(user.token, id)])
+      .then(([s, a]) => {
+        setSpace(s);
+        setAssets(a);
+      })
       .catch(() => Alert.alert("Hata", "Alan yüklenemedi."))
       .finally(() => setLoading(false));
   }, [user?.token, id]);
@@ -61,10 +65,7 @@ export default function SpaceDetailScreen() {
   return (
     <Screen>
       <Button label="← Geri" variant="ghost" fullWidth={false} onPress={() => router.back()} />
-      <PageHeader
-        title={space.name}
-        subtitle={typeInfo?.description.tr ?? "Ortak alan"}
-      />
+      <PageHeader title={space.name} subtitle={typeInfo?.description.tr ?? "Ortak alan"} />
 
       <Card title="Durum">
         <Text style={styles.meta}>{statusLabel[space.status] ?? space.status}</Text>
@@ -73,15 +74,44 @@ export default function SpaceDetailScreen() {
       <Card title="Üyeler" style={styles.gap}>
         {space.members.map((m) => (
           <View key={m.userId} style={styles.memberRow}>
-            <View>
-              <Text style={styles.memberName}>{m.displayName}</Text>
-              <Text style={styles.memberMeta}>
-                {m.role === "owner" ? "Sahip" : m.role === "viewer" ? "İzleyici" : "Üye"}
-                {m.status === "pending" ? " · Onay bekliyor" : ""}
-              </Text>
-            </View>
+            <Text style={styles.memberName}>{m.displayName}</Text>
+            <Text style={styles.memberMeta}>
+              {m.role === "owner" ? "Sahip" : m.role === "viewer" ? "İzleyici" : "Üye"}
+              {m.status === "pending" ? " · Onay bekliyor" : ""}
+            </Text>
           </View>
         ))}
+      </Card>
+
+      <Card title="Paylaşılan içerikler" style={styles.gap}>
+        {assets.length === 0 ? (
+          <Text style={styles.meta}>Henüz paylaşılan içerik yok.</Text>
+        ) : (
+          assets.map((asset) => (
+            <Pressable key={asset.id} onPress={() => router.push(`/asset/${asset.id}`)} style={styles.assetRow}>
+              {asset.type === "image" && asset.url && user?.token ? (
+                <Image
+                  source={{
+                    uri: assetContentUrl(asset),
+                    headers: { Authorization: `Bearer ${user.token}` },
+                  }}
+                  style={styles.thumb}
+                />
+              ) : (
+                <View style={styles.docThumb}>
+                  <Text>📄</Text>
+                </View>
+              )}
+              <View style={styles.assetInfo}>
+                <Text style={styles.memberName}>{asset.title}</Text>
+                <Text style={styles.memberMeta}>
+                  {asset.isOwner ? "Senin paylaşımın" : "Paylaşılan"}
+                </Text>
+              </View>
+            </Pressable>
+          ))
+        )}
+        <Button label="Arşivden paylaş" variant="secondary" onPress={() => router.push("/archive")} />
       </Card>
 
       {space.pendingInvites && space.pendingInvites.length > 0 ? (
@@ -105,10 +135,6 @@ export default function SpaceDetailScreen() {
       {!isOwner && space.myRole ? (
         <Button label="Alandan ayrıl" variant="secondary" style={styles.gap} onPress={handleLeave} />
       ) : null}
-
-      <Text style={styles.note}>
-        Kişisel günlük ve check-in verilerin otomatik paylaşılmaz. Paylaşım Faz 3.2 ile gelecek.
-      </Text>
     </Screen>
   );
 }
@@ -131,16 +157,20 @@ const styles = StyleSheet.create({
     fontSize: theme.font.size.xs,
     color: theme.color.text.tertiary,
   },
+  assetRow: { flexDirection: "row", gap: theme.space.md, alignItems: "center", marginBottom: theme.space.md },
+  thumb: { width: 48, height: 48, borderRadius: theme.radius.sm },
+  docThumb: {
+    width: 48,
+    height: 48,
+    borderRadius: theme.radius.sm,
+    backgroundColor: theme.color.surface.sunken,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  assetInfo: { flex: 1 },
   inviteEmail: {
     fontSize: theme.font.size.sm,
     color: theme.color.text.secondary,
     marginBottom: theme.space.xs,
-  },
-  note: {
-    marginTop: theme.space.xl,
-    fontSize: theme.font.size.xs,
-    lineHeight: 18,
-    color: theme.color.text.tertiary,
-    textAlign: "center",
   },
 });

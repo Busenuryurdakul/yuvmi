@@ -97,6 +97,8 @@ export default function SpacesScreen() {
         subtitle="Kişisel yolculuğundan ortak alanlara — ne paylaşacağına sen karar ver."
       />
 
+      <Button label="Arşivim" variant="secondary" onPress={() => router.push("/archive")} />
+
       {invites.length > 0 ? (
         <Card title="Bekleyen davetler" style={styles.section}>
           {invites.map((inv) => (
