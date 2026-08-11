@@ -27,26 +27,29 @@ function LabExperienceInner() {
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const apply = () => setReduceMotion(mq.matches);
+    const apply = () => {
+      setReduceMotion(mq.matches);
+
+      if (mq.matches) {
+        setIntroDone(true);
+        return;
+      }
+
+      if (forceIntro) return;
+
+      try {
+        if (sessionStorage.getItem("lab-intro-seen") === "1") {
+          setIntroDone(true);
+        }
+      } catch {
+        /* sessionStorage unavailable */
+      }
+    };
+
     apply();
     mq.addEventListener("change", apply);
     return () => mq.removeEventListener("change", apply);
-  }, []);
-
-  useEffect(() => {
-    if (forceIntro || reduceMotion) return;
-    try {
-      if (sessionStorage.getItem("lab-intro-seen") === "1") {
-        setIntroDone(true);
-      }
-    } catch {
-      /* sessionStorage unavailable */
-    }
-  }, [forceIntro, reduceMotion]);
-
-  useEffect(() => {
-    if (reduceMotion) setIntroDone(true);
-  }, [reduceMotion]);
+  }, [forceIntro]);
 
   const handleIntroComplete = useCallback(() => {
     try {
