@@ -9,12 +9,15 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { AlignmentRing } from "@/components/alignment/AlignmentRing";
 import { useAuth } from "@/context/AuthContext";
+import { useSubscription } from "@/hooks/useSubscription";
+import { PremiumGate } from "@/components/premium/PremiumGate";
 import { fetchActiveGoal, fetchActivePlan, fetchPlans, fetchTodayAlignment } from "@/lib/api/yuvmi";
 import type { AlignmentResponse, GoalResponse, PlanResponse } from "@/lib/api/types";
 import { theme } from "@/theme";
 
 export default function JourneyScreen() {
   const { user } = useAuth();
+  const { subscription, isPremium } = useSubscription();
   const [goal, setGoal] = useState<GoalResponse | null>(null);
   const [plan, setPlan] = useState<PlanResponse | null>(null);
   const [plans, setPlans] = useState<PlanResponse[]>([]);
@@ -40,6 +43,7 @@ export default function JourneyScreen() {
   if (loading) return <LoadingScreen />;
 
   const supersededCount = plans.filter((p) => p.status === "superseded").length;
+  const atGoalLimit = !isPremium && (subscription?.usage.goals ?? (goal ? 1 : 0)) >= (subscription?.limits.maxGoals ?? 1);
 
   return (
     <Screen>
@@ -68,6 +72,16 @@ export default function JourneyScreen() {
             <Text style={styles.meta}>{supersededCount} önceki plan sürümü</Text>
           ) : null}
         </Card>
+      ) : null}
+
+      {goal && atGoalLimit ? (
+        <PremiumGate
+          feature="İkinci hedef"
+          description="Ücretsiz planda bir aktif hedefin olabilir. Birden fazla hedefle yolculuğunu derinleştirmek için Premium'a geç."
+          style={styles.gap}
+        >
+          <Button label="Yeni hedef ekle" variant="secondary" disabled onPress={() => {}} />
+        </PremiumGate>
       ) : null}
 
       <Card title="Haftalık döngü" style={styles.gap}>

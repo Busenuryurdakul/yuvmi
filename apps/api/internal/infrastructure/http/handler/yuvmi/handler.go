@@ -814,6 +814,45 @@ func (h *Handler) DevUpgradeSubscription(w http.ResponseWriter, r *http.Request)
 	response.YuvmiData(w, http.StatusOK, data)
 }
 
+func (h *Handler) CreateSubscriptionCheckout(w http.ResponseWriter, r *http.Request) {
+	userID := mustUserID(w, r)
+	if userID == uuid.Nil {
+		return
+	}
+	data, err := h.svc.CreateSubscriptionCheckout(r.Context(), userID)
+	if err != nil {
+		response.YuvmiFail(w, err)
+		return
+	}
+	response.YuvmiData(w, http.StatusOK, data)
+}
+
+func (h *Handler) CancelSubscription(w http.ResponseWriter, r *http.Request) {
+	userID := mustUserID(w, r)
+	if userID == uuid.Nil {
+		return
+	}
+	data, err := h.svc.CancelSubscription(r.Context(), userID)
+	if err != nil {
+		response.YuvmiFail(w, err)
+		return
+	}
+	response.YuvmiData(w, http.StatusOK, data)
+}
+
+func (h *Handler) StripeWebhook(w http.ResponseWriter, r *http.Request) {
+	payload, err := usecase.ReadStripeWebhookBody(r.Body, 1<<20)
+	if err != nil {
+		response.YuvmiFail(w, domainErr.New(domainErr.ErrBadRequest, "invalid webhook body", err))
+		return
+	}
+	if err := h.svc.HandleStripeWebhook(r.Context(), payload, r.Header.Get("Stripe-Signature")); err != nil {
+		response.YuvmiFail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
 func (h *Handler) ExportUserData(w http.ResponseWriter, r *http.Request) {
 	userID := mustUserID(w, r)
 	if userID == uuid.Nil {

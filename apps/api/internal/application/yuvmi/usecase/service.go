@@ -21,6 +21,8 @@ import (
 	pgProfile "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/profile"
 	infraNotify "github.com/masterfabric-go/masterfabric/internal/infrastructure/notification"
 	"github.com/masterfabric-go/masterfabric/internal/infrastructure/storage"
+	"github.com/masterfabric-go/masterfabric/internal/shared/config"
+	infraStripe "github.com/masterfabric-go/masterfabric/internal/infrastructure/payment/stripe"
 )
 
 type Service struct {
@@ -41,6 +43,8 @@ type Service struct {
 	storage       storage.ObjectStorage
 	engine        *alignment.Engine
 	push          *infraNotify.ExpoPushClient
+	yuvmiCfg      config.YuvmiConfig
+	stripe        *infraStripe.Client
 }
 
 func NewService(
@@ -61,14 +65,20 @@ func NewService(
 	store storage.ObjectStorage,
 	engine *alignment.Engine,
 	push *infraNotify.ExpoPushClient,
+	yuvmiCfg config.YuvmiConfig,
 ) *Service {
-	return &Service{
+	svc := &Service{
 		users: users, profiles: profiles, profilePG: profilePG,
 		futureSelf: futureSelf, goals: goals, plans: plans, tasks: tasks,
 		checkins: checkins, alignment: alignment, reviews: reviews,
 		notifications: notifications, spaces: spaces, assets: assets,
 		subscriptions: subscriptions, storage: store, engine: engine, push: push,
+		yuvmiCfg: yuvmiCfg,
 	}
+	if yuvmiCfg.Stripe.Enabled() {
+		svc.stripe = infraStripe.NewClient(yuvmiCfg.Stripe.SecretKey, yuvmiCfg.Stripe.WebhookSecret)
+	}
+	return svc
 }
 
 func (s *Service) GetMe(ctx context.Context, userID uuid.UUID) (*dto.UserProfileResponse, error) {

@@ -10,6 +10,7 @@ import (
 	"github.com/masterfabric-go/masterfabric/internal/domain/iam/repository"
 	"github.com/masterfabric-go/masterfabric/internal/domain/iam/service"
 	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
+	"github.com/masterfabric-go/masterfabric/internal/shared/config"
 	"github.com/masterfabric-go/masterfabric/internal/shared/events"
 )
 
@@ -18,15 +19,24 @@ type RegisterUseCase struct {
 	userRepo repository.UserRepository
 	auth     service.AuthService
 	eventBus events.EventBus
+	yuvmiCfg config.YuvmiConfig
 }
 
 // NewRegisterUseCase creates a new RegisterUseCase.
-func NewRegisterUseCase(userRepo repository.UserRepository, auth service.AuthService, eventBus events.EventBus) *RegisterUseCase {
-	return &RegisterUseCase{userRepo: userRepo, auth: auth, eventBus: eventBus}
+func NewRegisterUseCase(
+	userRepo repository.UserRepository,
+	auth service.AuthService,
+	eventBus events.EventBus,
+	yuvmiCfg config.YuvmiConfig,
+) *RegisterUseCase {
+	return &RegisterUseCase{userRepo: userRepo, auth: auth, eventBus: eventBus, yuvmiCfg: yuvmiCfg}
 }
 
 // Execute registers a new user.
 func (uc *RegisterUseCase) Execute(ctx context.Context, req dto.RegisterRequest) (*dto.UserInfo, error) {
+	if IsDevPasswordBlocked(uc.yuvmiCfg, req.Password) {
+		return nil, domainErr.New(domainErr.ErrForbidden, "dev auth bridge is disabled", nil)
+	}
 	// Check if user already exists
 	existing, _ := uc.userRepo.GetByEmail(ctx, req.Email)
 	if existing != nil {

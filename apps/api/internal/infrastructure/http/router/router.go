@@ -93,8 +93,17 @@ func New(deps Dependencies) *chi.Mux {
 			if deps.IAMHandler != nil {
 				r.Post("/register", deps.IAMHandler.Register)
 				r.Post("/login", deps.IAMHandler.Login)
+				r.Post("/oauth", deps.IAMHandler.OAuthLogin)
+				r.Post("/refresh", deps.IAMHandler.RefreshToken)
+				r.Post("/forgot-password", deps.IAMHandler.ForgotPassword)
+				r.Post("/reset-password", deps.IAMHandler.ResetPassword)
 			}
 		})
+
+		// Public Yuvmi webhook (no JWT)
+		if deps.YuvmiHandler != nil {
+			r.Post("/subscription/webhook/stripe", deps.YuvmiHandler.StripeWebhook)
+		}
 
 		// Yuvmi product routes (JWT only — no tenant/org headers required)
 		r.Group(func(r chi.Router) {
@@ -104,6 +113,9 @@ func New(deps Dependencies) *chi.Mux {
 			if deps.YuvmiHandler != nil {
 				r.Get("/me", deps.YuvmiHandler.GetMe)
 				r.Patch("/me", deps.YuvmiHandler.UpdateMe)
+				if deps.IAMHandler != nil {
+					r.Delete("/me/account", deps.IAMHandler.DeleteAccount)
+				}
 
 				r.Route("/future-selfs", func(r chi.Router) {
 					r.Post("/", deps.YuvmiHandler.CreateFutureSelf)
@@ -181,6 +193,8 @@ func New(deps Dependencies) *chi.Mux {
 
 				r.Route("/subscription", func(r chi.Router) {
 					r.Get("/", deps.YuvmiHandler.GetSubscription)
+					r.Post("/checkout", deps.YuvmiHandler.CreateSubscriptionCheckout)
+					r.Post("/cancel", deps.YuvmiHandler.CancelSubscription)
 					r.Post("/dev-upgrade", deps.YuvmiHandler.DevUpgradeSubscription)
 				})
 

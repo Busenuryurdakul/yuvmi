@@ -43,5 +43,14 @@ type Subscription struct {
 }
 
 func (s *Subscription) IsPremiumActive() bool {
-	return s.Tier == TierPremium && s.Status == StatusActive
+	if s.Tier != TierPremium {
+		return false
+	}
+	if s.Status == StatusPastDue {
+		return false
+	}
+	if s.CurrentPeriodEnd != nil && time.Now().UTC().After(*s.CurrentPeriodEnd) {
+		return false
+	}
+	return s.Status == StatusActive || s.Status == StatusCancelled
 }

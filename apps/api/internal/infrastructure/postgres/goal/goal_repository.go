@@ -259,21 +259,44 @@ func (r *TaskRepo) GetByID(ctx context.Context, userID, taskID uuid.UUID) (*mode
 func (r *TaskRepo) Complete(ctx context.Context, userID, taskID uuid.UUID) error {
 	tag, err := r.db.Exec(ctx, `
 		UPDATE daily_tasks SET status='completed', completed_at=NOW(), updated_at=NOW()
-		WHERE id=$1 AND user_id=$2`, taskID, userID)
-	if err != nil || tag.RowsAffected() == 0 {
+		WHERE id=$1 AND user_id=$2 AND status='pending'`, taskID, userID)
+	if err != nil {
+		return domainErr.New(domainErr.ErrInternal, "failed to complete task", err)
+	}
+	if tag.RowsAffected() > 0 {
+		return nil
+	}
+	// Idempotent: already completed or skipped — treat as success.
+	var status string
+	err = r.db.QueryRow(ctx, `SELECT status FROM daily_tasks WHERE id=$1 AND user_id=$2`, taskID, userID).Scan(&status)
+	if err != nil {
 		return domainErr.New(domainErr.ErrNotFound, "task not found", err)
 	}
-	return nil
+	if status == "completed" || status == "skipped" {
+		return nil
+	}
+	return domainErr.New(domainErr.ErrNotFound, "task not found", nil)
 }
 
 func (r *TaskRepo) Skip(ctx context.Context, userID, taskID uuid.UUID, reason *string) error {
 	tag, err := r.db.Exec(ctx, `
 		UPDATE daily_tasks SET status='skipped', skipped_reason=$3, updated_at=NOW()
-		WHERE id=$1 AND user_id=$2`, taskID, userID, reason)
-	if err != nil || tag.RowsAffected() == 0 {
+		WHERE id=$1 AND user_id=$2 AND status='pending'`, taskID, userID, reason)
+	if err != nil {
+		return domainErr.New(domainErr.ErrInternal, "failed to skip task", err)
+	}
+	if tag.RowsAffected() > 0 {
+		return nil
+	}
+	var status string
+	err = r.db.QueryRow(ctx, `SELECT status FROM daily_tasks WHERE id=$1 AND user_id=$2`, taskID, userID).Scan(&status)
+	if err != nil {
 		return domainErr.New(domainErr.ErrNotFound, "task not found", err)
 	}
-	return nil
+	if status == "completed" || status == "skipped" {
+		return nil
+	}
+	return domainErr.New(domainErr.ErrNotFound, "task not found", nil)
 }
 
 func (r *TaskRepo) ListRecent(ctx context.Context, userID uuid.UUID, since time.Time) ([]*model.DailyTask, error) {

@@ -1,10 +1,12 @@
 package usecase
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -30,7 +32,7 @@ func (s *Service) GetSubscription(ctx context.Context, userID uuid.UUID) (*dto.S
 }
 
 func (s *Service) DevUpgradeSubscription(ctx context.Context, userID uuid.UUID) (*dto.SubscriptionResponse, error) {
-	if os.Getenv("YUVMI_ALLOW_DEV_PREMIUM") != "1" {
+	if !s.yuvmiCfg.AllowDevPremium {
 		return nil, domainErr.New(domainErr.ErrForbidden, "dev premium upgrade is disabled", nil)
 	}
 
@@ -84,17 +86,48 @@ func (s *Service) ExportUserData(ctx context.Context, userID uuid.UUID) (*dto.Da
 	if alignment, err := s.GetAlignmentHistory(ctx, userID); err == nil {
 		export["alignmentHistory"] = alignment
 	}
+	checkins, _ := s.checkins.ListSince(ctx, userID, time.Time{})
+	if len(checkins) > 0 {
+		export["checkins"] = checkins
+	}
 
-	raw, err := json.Marshal(export)
+	raw, err := json.MarshalIndent(export, "", "  ")
 	if err != nil {
 		return nil, domainErr.New(domainErr.ErrInternal, "failed to serialize export", err)
 	}
 
+	zipBytes, err := buildExportZip(raw)
+	if err != nil {
+		return nil, domainErr.New(domainErr.ErrInternal, "failed to build export archive", err)
+	}
+
+	encoded := base64.StdEncoding.EncodeToString(zipBytes)
+	data, err := json.Marshal(encoded)
+	if err != nil {
+		return nil, domainErr.New(domainErr.ErrInternal, "failed to encode export", err)
+	}
 	return &dto.DataExportResponse{
-		Filename: "yuvmi-export.json",
-		MimeType: "application/json",
-		Data:     raw,
+		Filename: "yuvmi-export.zip",
+		MimeType: "application/zip",
+		Encoding: "base64",
+		Data:     data,
 	}, nil
+}
+
+func buildExportZip(jsonPayload []byte) ([]byte, error) {
+	buf := new(bytes.Buffer)
+	zw := zip.NewWriter(buf)
+	w, err := zw.Create("yuvmi-export.json")
+	if err != nil {
+		return nil, err
+	}
+	if _, err := w.Write(jsonPayload); err != nil {
+		return nil, err
+	}
+	if err := zw.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 func (s *Service) ensureSubscription(ctx context.Context, userID uuid.UUID) (*submodel.Subscription, error) {
@@ -177,9 +210,10 @@ func (s *Service) buildSubscriptionResponse(ctx context.Context, userID uuid.UUI
 	}
 
 	resp := &dto.SubscriptionResponse{
-		Tier:   string(sub.Tier),
-		Status: string(sub.Status),
-		Limits: limits,
+		Tier:          string(sub.Tier),
+		Status:        string(sub.Status),
+		PremiumActive: sub.IsPremiumActive(),
+		Limits:        limits,
 		Usage: dto.PremiumUsageResponse{
 			Goals:  goalCount,
 			Spaces: spaceCount,

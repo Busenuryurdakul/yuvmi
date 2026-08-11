@@ -6,7 +6,7 @@ import type { OAuthProfile } from "./types";
 WebBrowser.maybeCompleteAuthSession();
 
 type GoogleSignInResult =
-  | { ok: true; user: OAuthProfile }
+  | { ok: true; user: OAuthProfile; idToken: string }
   | { ok: false; reason: "cancelled" | "unconfigured" | "failed"; message?: string };
 
 export function useGoogleAuthRequest() {
@@ -42,8 +42,9 @@ export async function promptGoogleSignIn(
   }
 
   const accessToken = result.authentication?.accessToken;
-  if (!accessToken) {
-    return { ok: false, reason: "failed", message: "Google erişim jetonu alınamadı." };
+  const idToken = result.authentication?.idToken;
+  if (!accessToken || !idToken) {
+    return { ok: false, reason: "failed", message: "Google jetonları alınamadı." };
   }
 
   const profileResponse = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
@@ -63,6 +64,7 @@ export async function promptGoogleSignIn(
 
   return {
     ok: true,
+    idToken,
     user: {
       id: profile.sub,
       email: profile.email ?? "google-user@yuvmi.app",

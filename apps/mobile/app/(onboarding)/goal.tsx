@@ -7,6 +7,7 @@ import { Stepper } from "@/components/ui/Stepper";
 import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/context/AuthContext";
 import { useOnboarding } from "@/context/OnboardingContext";
+import { promptPremiumUpsell } from "@/hooks/usePremiumUpsell";
 import { createGoal, fetchFutureSelf } from "@/lib/api/yuvmi";
 import { theme } from "@/theme";
 
@@ -33,7 +34,9 @@ export default function OnboardingGoalScreen() {
       setGoalId(goal.id);
       router.push("/(onboarding)/plan");
     } catch (error) {
-      Alert.alert("Kaydedilemedi", error instanceof Error ? error.message : "Bir hata oluştu.");
+      if (!promptPremiumUpsell(error, { feature: "Ek hedef oluşturma" })) {
+        Alert.alert("Kaydedilemedi", error instanceof Error ? error.message : "Bir hata oluştu.");
+      }
     } finally {
       setLoading(false);
     }

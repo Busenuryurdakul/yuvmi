@@ -253,6 +253,17 @@ func (s *Service) GetPlanDiff(ctx context.Context, userID, fromID, toID uuid.UUI
 				ID: step.ID, DayOffset: step.DayOffset, Title: step.Title,
 				Description: step.Description, SortOrder: step.SortOrder,
 			})
+			diff.ChangedPairs = append(diff.ChangedPairs, dto.PlanStepPairResponse{
+				DayOffset: step.DayOffset,
+				From: dto.PlanStepResponse{
+					ID: old.ID, DayOffset: old.DayOffset, Title: old.Title,
+					Description: old.Description, SortOrder: old.SortOrder,
+				},
+				To: dto.PlanStepResponse{
+					ID: step.ID, DayOffset: step.DayOffset, Title: step.Title,
+					Description: step.Description, SortOrder: step.SortOrder,
+				},
+			})
 		}
 	}
 	for offset, step := range fromMap {
@@ -279,6 +290,11 @@ func (s *Service) RegisterPushToken(ctx context.Context, userID uuid.UUID, req d
 func (s *Service) SendTestPush(ctx context.Context, userID uuid.UUID) error {
 	return s.notifyUser(ctx, userID, "Yuvmi test bildirimi",
 		"Push bildirimleri çalışıyor.", "test", nil)
+}
+
+// SendScheduledPush sends a cron-triggered push and in-app notification.
+func (s *Service) SendScheduledPush(ctx context.Context, userID uuid.UUID, title, body, nType string) error {
+	return s.notifyUser(ctx, userID, title, body, nType, nil)
 }
 
 func (s *Service) ListNotifications(ctx context.Context, userID uuid.UUID) ([]dto.NotificationResponse, error) {

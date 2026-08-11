@@ -71,6 +71,8 @@ export default function ProfileScreen() {
         <Button label="Arşiv" variant="secondary" onPress={() => router.push("/archive")} />
         <Button label="Premium & abonelik" variant="secondary" onPress={() => router.push("/premium")} />
         <Button label="Bildirimler" variant="secondary" onPress={() => router.push("/notifications")} />
+        <Button label="Şifre sıfırla" variant="secondary" onPress={() => router.push("/settings/forgot-password")} />
+        <Button label="Hesabı sil" variant="secondary" onPress={() => router.push("/settings/delete-account")} />
         <Button label="Çıkış yap" variant="secondary" onPress={() => void handleSignOut()} />
       </Card>
     </Screen>

@@ -15,6 +15,10 @@ type Config struct {
 	Database  DatabaseConfig
 	Redis     RedisConfig
 	JWT       JWTConfig
+	OAuth     OAuthConfig
+	Yuvmi     YuvmiConfig
+	SMTP      SMTPConfig
+	Cron      CronConfig
 	Kafka     KafkaConfig
 	WebSocket WebSocketConfig
 	Log       LogConfig
@@ -79,9 +83,57 @@ func (r RedisConfig) Addr() string {
 
 // JWTConfig holds JWT signing settings.
 type JWTConfig struct {
-	Secret          string
-	ExpirationHours int
-	Issuer          string
+	Secret                 string
+	ExpirationHours        int
+	AccessExpirationMinutes int
+	RefreshExpirationDays  int
+	Issuer                 string
+}
+
+// OAuthConfig holds OAuth provider verification settings.
+type OAuthConfig struct {
+	GoogleClientIDs []string
+	AppleBundleID   string
+}
+
+// YuvmiConfig holds Yuvmi product-specific feature flags.
+type YuvmiConfig struct {
+	AllowDevOAuth    bool
+	AllowDevPremium  bool
+	DevOAuthPassword string
+	LogPasswordReset bool
+	AppBaseURL       string
+	Stripe           StripeConfig
+}
+
+// StripeConfig holds Stripe Checkout + webhook settings.
+type StripeConfig struct {
+	SecretKey      string
+	WebhookSecret  string
+	PriceID        string
+	SuccessURL     string
+	CancelURL      string
+}
+
+func (c StripeConfig) Enabled() bool {
+	return c.SecretKey != "" && c.PriceID != ""
+}
+
+// SMTPConfig holds optional email delivery settings.
+type SMTPConfig struct {
+	Host     string
+	Port     int
+	User     string
+	Password string
+	From     string
+}
+
+// CronConfig holds background job settings.
+type CronConfig struct {
+	Enabled          bool
+	PushIntervalMin  int
+	DailyReminderHour int
+	WeeklyReminderDay int // 0=Sunday
 }
 
 // KafkaConfig holds Kafka connection and consumer settings.
@@ -128,9 +180,42 @@ func Load() *Config {
 			DB:       envOrDefaultInt("REDIS_DB", 0),
 		},
 		JWT: JWTConfig{
-			Secret:          envOrDefault("JWT_SECRET", "change-me-in-production"),
-			ExpirationHours: envOrDefaultInt("JWT_EXPIRATION_HOURS", 24),
-			Issuer:          envOrDefault("JWT_ISSUER", "masterfabric"),
+			Secret:                  envOrDefault("JWT_SECRET", "change-me-in-production"),
+			ExpirationHours:         envOrDefaultInt("JWT_EXPIRATION_HOURS", 24),
+			AccessExpirationMinutes: envOrDefaultInt("JWT_ACCESS_EXPIRATION_MINUTES", 60),
+			RefreshExpirationDays:   envOrDefaultInt("JWT_REFRESH_EXPIRATION_DAYS", 30),
+			Issuer:                  envOrDefault("JWT_ISSUER", "masterfabric"),
+		},
+		OAuth: OAuthConfig{
+			GoogleClientIDs: envOrDefaultSlice("OAUTH_GOOGLE_CLIENT_IDS", nil),
+			AppleBundleID:   envOrDefault("OAUTH_APPLE_BUNDLE_ID", "com.yuvmi.app"),
+		},
+		Yuvmi: YuvmiConfig{
+			AllowDevOAuth:    envOrDefault("YUVMI_ALLOW_DEV_OAUTH", "0") == "1",
+			AllowDevPremium:  envOrDefault("YUVMI_ALLOW_DEV_PREMIUM", "0") == "1",
+			DevOAuthPassword: envOrDefault("YUVMI_DEV_OAUTH_PASSWORD", "yuvmi-dev-12345678"),
+			LogPasswordReset: envOrDefault("YUVMI_LOG_PASSWORD_RESET", "0") == "1",
+			AppBaseURL:       envOrDefault("YUVMI_APP_BASE_URL", "http://localhost:8081"),
+			Stripe: StripeConfig{
+				SecretKey:     envOrDefault("STRIPE_SECRET_KEY", ""),
+				WebhookSecret: envOrDefault("STRIPE_WEBHOOK_SECRET", ""),
+				PriceID:       envOrDefault("STRIPE_PRICE_ID", ""),
+				SuccessURL:    envOrDefault("STRIPE_SUCCESS_URL", envOrDefault("YUVMI_APP_BASE_URL", "http://localhost:8081")+"/premium?checkout=success"),
+				CancelURL:     envOrDefault("STRIPE_CANCEL_URL", envOrDefault("YUVMI_APP_BASE_URL", "http://localhost:8081")+"/premium?checkout=cancel"),
+			},
+		},
+		SMTP: SMTPConfig{
+			Host:     envOrDefault("SMTP_HOST", ""),
+			Port:     envOrDefaultInt("SMTP_PORT", 587),
+			User:     envOrDefault("SMTP_USER", ""),
+			Password: envOrDefault("SMTP_PASSWORD", ""),
+			From:     envOrDefault("SMTP_FROM", "noreply@yuvmi.app"),
+		},
+		Cron: CronConfig{
+			Enabled:           envOrDefault("CRON_ENABLED", "true") == "true",
+			PushIntervalMin:   envOrDefaultInt("CRON_PUSH_INTERVAL_MINUTES", 15),
+			DailyReminderHour: envOrDefaultInt("CRON_DAILY_REMINDER_HOUR", 9),
+			WeeklyReminderDay: envOrDefaultInt("CRON_WEEKLY_REMINDER_DAY", 0),
 		},
 		Kafka: KafkaConfig{
 			Brokers:           envOrDefaultSlice("KAFKA_BROKERS", []string{"localhost:9092"}),

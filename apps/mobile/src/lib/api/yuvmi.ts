@@ -42,6 +42,52 @@ export async function loginUser(email: string, password: string) {
   });
 }
 
+export async function oauthLogin(input: {
+  provider: "google" | "apple";
+  idToken: string;
+  firstName?: string;
+  lastName?: string;
+}) {
+  return apiRequest<LoginResponse>("/api/v1/auth/oauth", {
+    method: "POST",
+    body: {
+      provider: input.provider,
+      id_token: input.idToken,
+      first_name: input.firstName,
+      last_name: input.lastName,
+    },
+  });
+}
+
+export async function refreshAuthToken(refreshToken: string) {
+  return apiRequest<LoginResponse>("/api/v1/auth/refresh", {
+    method: "POST",
+    body: { refresh_token: refreshToken },
+  });
+}
+
+export async function forgotPassword(email: string) {
+  return apiRequest<{ message: string }>("/api/v1/auth/forgot-password", {
+    method: "POST",
+    body: { email },
+  });
+}
+
+export async function resetPassword(token: string, newPassword: string) {
+  return apiRequest<{ message: string }>("/api/v1/auth/reset-password", {
+    method: "POST",
+    body: { token, new_password: newPassword },
+  });
+}
+
+export async function deleteAccount(token: string, password?: string) {
+  return apiRequest<void>("/api/v1/me/account", {
+    method: "DELETE",
+    token,
+    body: password ? { password } : {},
+  });
+}
+
 export async function fetchMe(token: string) {
   return apiRequest<UserProfileResponse>("/api/v1/me", { token });
 }
@@ -333,6 +379,22 @@ export async function fetchSubscription(token: string) {
 
 export async function devUpgradeSubscription(token: string) {
   return apiRequest<import("./types").SubscriptionResponse>("/api/v1/subscription/dev-upgrade", {
+    token,
+    method: "POST",
+    body: {},
+  });
+}
+
+export async function createSubscriptionCheckout(token: string) {
+  return apiRequest<import("./types").CheckoutSessionResponse>("/api/v1/subscription/checkout", {
+    token,
+    method: "POST",
+    body: {},
+  });
+}
+
+export async function cancelSubscription(token: string) {
+  return apiRequest<import("./types").SubscriptionResponse>("/api/v1/subscription/cancel", {
     token,
     method: "POST",
     body: {},

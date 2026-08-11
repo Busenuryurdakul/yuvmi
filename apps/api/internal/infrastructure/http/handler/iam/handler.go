@@ -17,24 +17,39 @@ import (
 
 // Handler provides IAM HTTP handlers.
 type Handler struct {
-	registerUC  *usecase.RegisterUseCase
-	loginUC     *usecase.LoginUseCase
-	assignRoleUC *usecase.AssignRoleUseCase
-	userRepo    iamRepo.UserRepository
+	registerUC       *usecase.RegisterUseCase
+	loginUC          *usecase.LoginUseCase
+	oauthUC          *usecase.OAuthLoginUseCase
+	refreshUC        *usecase.RefreshTokenUseCase
+	forgotPasswordUC *usecase.ForgotPasswordUseCase
+	resetPasswordUC  *usecase.ResetPasswordUseCase
+	deleteAccountUC  *usecase.DeleteAccountUseCase
+	assignRoleUC     *usecase.AssignRoleUseCase
+	userRepo         iamRepo.UserRepository
 }
 
 // NewHandler creates a new IAM handler.
 func NewHandler(
 	registerUC *usecase.RegisterUseCase,
 	loginUC *usecase.LoginUseCase,
+	oauthUC *usecase.OAuthLoginUseCase,
+	refreshUC *usecase.RefreshTokenUseCase,
+	forgotPasswordUC *usecase.ForgotPasswordUseCase,
+	resetPasswordUC *usecase.ResetPasswordUseCase,
+	deleteAccountUC *usecase.DeleteAccountUseCase,
 	assignRoleUC *usecase.AssignRoleUseCase,
 	userRepo iamRepo.UserRepository,
 ) *Handler {
 	return &Handler{
-		registerUC:  registerUC,
-		loginUC:     loginUC,
-		assignRoleUC: assignRoleUC,
-		userRepo:    userRepo,
+		registerUC:       registerUC,
+		loginUC:          loginUC,
+		oauthUC:          oauthUC,
+		refreshUC:        refreshUC,
+		forgotPasswordUC: forgotPasswordUC,
+		resetPasswordUC:  resetPasswordUC,
+		deleteAccountUC:  deleteAccountUC,
+		assignRoleUC:     assignRoleUC,
+		userRepo:         userRepo,
 	}
 }
 
@@ -70,6 +85,91 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, result)
+}
+
+// OAuthLogin handles Google/Apple OAuth sign-in.
+func (h *Handler) OAuthLogin(w http.ResponseWriter, r *http.Request) {
+	var req dto.OAuthRequest
+	if err := validator.DecodeAndValidate(r, &req); err != nil {
+		response.JSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	result, err := h.oauthUC.Execute(r.Context(), req)
+	if err != nil {
+		response.Error(w, err)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, result)
+}
+
+// RefreshToken issues a new access token from a refresh token.
+func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
+	var req dto.RefreshRequest
+	if err := validator.DecodeAndValidate(r, &req); err != nil {
+		response.JSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	result, err := h.refreshUC.Execute(r.Context(), req)
+	if err != nil {
+		response.Error(w, err)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, result)
+}
+
+// ForgotPassword initiates password reset.
+func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
+	var req dto.ForgotPasswordRequest
+	if err := validator.DecodeAndValidate(r, &req); err != nil {
+		response.JSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if err := h.forgotPasswordUC.Execute(r.Context(), req); err != nil {
+		response.Error(w, err)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, map[string]string{"message": "If the email exists, a reset link was sent."})
+}
+
+// ResetPassword completes password reset.
+func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
+	var req dto.ResetPasswordRequest
+	if err := validator.DecodeAndValidate(r, &req); err != nil {
+		response.JSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if err := h.resetPasswordUC.Execute(r.Context(), req); err != nil {
+		response.Error(w, err)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, map[string]string{"message": "Password updated."})
+}
+
+// DeleteAccount permanently removes the authenticated user's account.
+func (h *Handler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		response.JSON(w, http.StatusUnauthorized, map[string]string{"error": "not authenticated"})
+		return
+	}
+
+	var req dto.DeleteAccountRequest
+	_ = validator.DecodeAndValidate(r, &req)
+
+	if err := h.deleteAccountUC.Execute(r.Context(), userID, req); err != nil {
+		response.Error(w, err)
+		return
+	}
+
+	response.NoContent(w)
 }
 
 // AssignRole handles role assignment.

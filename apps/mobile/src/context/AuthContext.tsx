@@ -8,7 +8,13 @@ import {
   type ReactNode,
 } from "react";
 import { ApiError } from "@/lib/api/client";
-import { fetchMe, loginUser, registerUser } from "@/lib/api/yuvmi";
+import {
+  fetchMe,
+  loginUser,
+  oauthLogin,
+  refreshAuthToken,
+  registerUser,
+} from "@/lib/api/yuvmi";
 import { createDevAppleUser, signInWithAppleNative } from "@/lib/auth/apple";
 import {
   createDevGoogleUser,
@@ -21,7 +27,13 @@ import {
   loadStoredSession,
   persistSession,
 } from "@/lib/auth/session";
-import { AUTH_STORAGE_KEY, DEV_OAUTH_PASSWORD, type AuthProvider, type AuthUser } from "@/lib/auth/types";
+import {
+  AUTH_STORAGE_KEY,
+  DEV_OAUTH_PASSWORD,
+  isDevAuthAllowed,
+  type AuthProvider,
+  type AuthUser,
+} from "@/lib/auth/types";
 
 type AuthContextValue = {
   user: AuthUser | null;
@@ -39,48 +51,66 @@ type AuthContextValue = {
   refreshProfile: () => Promise<void>;
   markOnboardingComplete: () => void;
   signOut: () => Promise<void>;
+  updateTokens: (token: string, refreshToken: string) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-async function backendSignIn(input: {
+function toAuthUser(
+  login: { token: string; refresh_token: string },
+  profile: Awaited<ReturnType<typeof fetchMe>>,
+  provider: AuthProvider,
+  displayName: string,
+): AuthUser {
+  return {
+    id: profile.id,
+    email: profile.email,
+    displayName: profile.displayName || displayName,
+    provider,
+    token: login.token,
+    refreshToken: login.refresh_token,
+    onboardingComplete: profile.onboardingComplete,
+  };
+}
+
+async function devBridgeSignIn(input: {
   email: string;
-  password: string;
   provider: AuthProvider;
   displayName: string;
 }): Promise<AuthUser> {
   let login;
   try {
-    login = await loginUser(input.email, input.password);
+    login = await loginUser(input.email, DEV_OAUTH_PASSWORD);
   } catch (error) {
     if (error instanceof ApiError && error.code === 401) {
       await registerUser({
         email: input.email,
-        password: input.password,
+        password: DEV_OAUTH_PASSWORD,
         firstName: input.displayName.split(" ")[0] ?? "Yuvmi",
         lastName: input.displayName.split(" ").slice(1).join(" ") || "Kullanıcı",
       });
-      login = await loginUser(input.email, input.password);
+      login = await loginUser(input.email, DEV_OAUTH_PASSWORD);
     } else {
       throw error;
     }
   }
-
   const profile = await fetchMe(login.token);
-  return {
-    id: profile.id,
-    email: profile.email,
-    displayName: profile.displayName || input.displayName,
-    provider: input.provider,
-    token: login.token,
-    onboardingComplete: profile.onboardingComplete,
-  };
+  return toAuthUser(login, profile, input.provider, input.displayName);
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { request, promptAsync } = useGoogleAuthRequest();
+
+  const updateTokens = useCallback(async (token: string, refreshToken: string) => {
+    setUser((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, token, refreshToken };
+      void persistSession(next);
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -102,6 +132,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           onboardingComplete: profile.onboardingComplete,
         });
       } catch {
+        if (session.refreshToken) {
+          try {
+            const refreshed = await refreshAuthToken(session.refreshToken);
+            const profile = await fetchMe(refreshed.token);
+            const next = toAuthUser(refreshed, profile, session.provider, session.displayName);
+            await persistSession(next);
+            setUser(next);
+            if (mounted) setIsLoading(false);
+            return;
+          } catch {
+            // fall through
+          }
+        }
         await clearStoredSession();
       } finally {
         if (mounted) setIsLoading(false);
@@ -137,14 +180,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         const login = await loginUser(input.email, input.password);
         const profile = await fetchMe(login.token);
-        await completeSignIn({
-          id: profile.id,
-          email: profile.email,
-          displayName: profile.displayName || `${input.firstName ?? "Yuvmi"} ${input.lastName ?? ""}`.trim(),
-          provider: "email",
-          token: login.token,
-          onboardingComplete: profile.onboardingComplete,
-        });
+        await completeSignIn(
+          toAuthUser(
+            login,
+            profile,
+            "email",
+            `${input.firstName ?? "Yuvmi"} ${input.lastName ?? ""}`.trim(),
+          ),
+        );
         return { ok: true };
       } catch (error) {
         const message = error instanceof ApiError ? error.message : "Giriş başarısız.";
@@ -157,15 +200,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithGoogle = useCallback(async () => {
     try {
       if (!isGoogleConfigured()) {
+        if (!isDevAuthAllowed()) {
+          return { ok: false, message: "Google OAuth yapılandırılmamış." };
+        }
         const devUser = createDevGoogleUser();
-        const authed = await backendSignIn({
+        const authed = await devBridgeSignIn({
           email: devUser.email,
-          password: DEV_OAUTH_PASSWORD,
           provider: "google",
           displayName: devUser.displayName,
         });
         await completeSignIn(authed);
-        return { ok: true, message: "Google yapılandırması yok — backend dev oturumu açıldı." };
+        return { ok: true, message: "Google yapılandırması yok — dev oturumu açıldı." };
       }
 
       const result = await promptGoogleSignIn(promptAsync, request);
@@ -174,13 +219,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { ok: false, message: result.message ?? "Google ile giriş başarısız." };
       }
 
-      const authed = await backendSignIn({
-        email: result.user.email,
-        password: DEV_OAUTH_PASSWORD,
+      const login = await oauthLogin({
         provider: "google",
-        displayName: result.user.displayName,
+        idToken: result.idToken,
+        firstName: result.user.displayName.split(" ")[0],
+        lastName: result.user.displayName.split(" ").slice(1).join(" "),
       });
-      await completeSignIn(authed);
+      const profile = await fetchMe(login.token);
+      await completeSignIn(toAuthUser(login, profile, "google", result.user.displayName));
       return { ok: true };
     } catch (error) {
       const message = error instanceof ApiError ? error.message : "Google girişi başarısız.";
@@ -193,27 +239,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const result = await signInWithAppleNative();
       if (!result.ok) {
         if (result.reason === "unavailable") {
+          if (!isDevAuthAllowed()) {
+            return { ok: false, message: "Apple girişi bu ortamda kullanılamıyor." };
+          }
           const devUser = createDevAppleUser();
-          const authed = await backendSignIn({
+          const authed = await devBridgeSignIn({
             email: devUser.email,
-            password: DEV_OAUTH_PASSWORD,
             provider: "apple",
             displayName: devUser.displayName,
           });
           await completeSignIn(authed);
-          return { ok: true, message: "Apple bu ortamda yok — backend dev oturumu açıldı." };
+          return { ok: true, message: "Apple bu ortamda yok — dev oturumu açıldı." };
         }
         if (result.reason === "cancelled") return { ok: false, message: "Apple girişi iptal edildi." };
         return { ok: false, message: result.message ?? "Apple ile giriş başarısız." };
       }
 
-      const authed = await backendSignIn({
-        email: result.user.email,
-        password: DEV_OAUTH_PASSWORD,
+      const login = await oauthLogin({
         provider: "apple",
-        displayName: result.user.displayName,
+        idToken: result.identityToken,
+        firstName: result.user.displayName.split(" ")[0],
+        lastName: result.user.displayName.split(" ").slice(1).join(" "),
       });
-      await completeSignIn(authed);
+      const profile = await fetchMe(login.token);
+      await completeSignIn(toAuthUser(login, profile, "apple", result.user.displayName));
       return { ok: true };
     } catch (error) {
       const message = error instanceof ApiError ? error.message : "Apple girişi başarısız.";
@@ -252,8 +301,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshProfile,
       markOnboardingComplete,
       signOut,
+      updateTokens,
     }),
-    [user, isLoading, signInWithEmail, signInWithGoogle, signInWithApple, refreshProfile, markOnboardingComplete, signOut],
+    [user, isLoading, signInWithEmail, signInWithGoogle, signInWithApple, refreshProfile, markOnboardingComplete, signOut, updateTokens],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

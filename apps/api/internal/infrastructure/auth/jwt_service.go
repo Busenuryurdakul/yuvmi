@@ -2,6 +2,10 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -15,18 +19,33 @@ import (
 
 // JWTService implements service.AuthService using JWT and bcrypt.
 type JWTService struct {
-	secret     []byte
-	expiration time.Duration
-	issuer     string
+	secret          []byte
+	expiration      time.Duration
+	refreshDays     int
+	issuer          string
 }
 
 // NewJWTService creates a new JWTService from config.
 func NewJWTService(cfg config.JWTConfig) *JWTService {
-	return &JWTService{
-		secret:     []byte(cfg.Secret),
-		expiration: time.Duration(cfg.ExpirationHours) * time.Hour,
-		issuer:     cfg.Issuer,
+	expiration := time.Duration(cfg.ExpirationHours) * time.Hour
+	if cfg.AccessExpirationMinutes > 0 {
+		expiration = time.Duration(cfg.AccessExpirationMinutes) * time.Minute
 	}
+	refreshDays := cfg.RefreshExpirationDays
+	if refreshDays <= 0 {
+		refreshDays = 30
+	}
+	return &JWTService{
+		secret:      []byte(cfg.Secret),
+		expiration:  expiration,
+		refreshDays: refreshDays,
+		issuer:      cfg.Issuer,
+	}
+}
+
+// RefreshExpiration returns the configured refresh token lifetime.
+func (s *JWTService) RefreshExpiration() time.Duration {
+	return time.Duration(s.refreshDays) * 24 * time.Hour
 }
 
 // customClaims extends JWT standard claims with our domain data.
@@ -105,4 +124,17 @@ func (s *JWTService) ValidateToken(_ context.Context, tokenStr string) (*service
 		Roles:          claims.Roles,
 		Permissions:    claims.Permissions,
 	}, nil
+}
+
+func (s *JWTService) GenerateRefreshToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generate refresh token: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+func (s *JWTService) HashRefreshToken(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
 }

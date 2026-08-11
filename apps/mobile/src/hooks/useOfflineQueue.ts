@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useState } from "react";
+import { ApiError } from "@/lib/api/client";
 import { completeTask, skipTask, upsertCheckin } from "@/lib/api/yuvmi";
 import type { LifeDomain } from "@yuvmi/shared";
 
@@ -40,32 +41,70 @@ async function saveQueue(items: OfflineQueueItem[]) {
   await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(items));
 }
 
+/** Collapse duplicate items — latest check-in wins; one action per task id. */
+function dedupeQueue(items: OfflineQueueItem[]): OfflineQueueItem[] {
+  const sorted = [...items].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+  );
+  let checkin: OfflineQueueItem | null = null;
+  const taskActions = new Map<string, OfflineQueueItem>();
+
+  for (const item of sorted) {
+    if (item.type === "checkin") {
+      checkin = item;
+    } else if (item.type === "task_complete" || item.type === "task_skip") {
+      taskActions.set(item.payload.taskId, item);
+    }
+  }
+
+  const out: OfflineQueueItem[] = [];
+  if (checkin) out.push(checkin);
+  out.push(...taskActions.values());
+  return out;
+}
+
+function isStaleError(error: unknown): boolean {
+  return error instanceof ApiError && (error.code === 404 || error.code === 409);
+}
+
 export function useOfflineQueue(token: string | null | undefined) {
   const [pendingCount, setPendingCount] = useState(0);
   const [flushing, setFlushing] = useState(false);
 
   const refreshCount = useCallback(async () => {
-    const items = await loadQueue();
+    const items = dedupeQueue(await loadQueue());
     setPendingCount(items.length);
   }, []);
 
   const enqueue = useCallback(
     async (item: Omit<OfflineQueueItem, "id" | "createdAt">) => {
-      const items = await loadQueue();
-      items.push({
+      const items = dedupeQueue(await loadQueue());
+      const next: OfflineQueueItem = {
         ...item,
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         createdAt: new Date().toISOString(),
-      } as OfflineQueueItem);
-      await saveQueue(items);
-      setPendingCount(items.length);
+      } as OfflineQueueItem;
+
+      if (item.type === "checkin") {
+        const withoutCheckins = items.filter((i) => i.type !== "checkin");
+        await saveQueue(dedupeQueue([...withoutCheckins, next]));
+      } else {
+        const taskId = item.payload.taskId;
+        const withoutTask = items.filter(
+          (i) =>
+            (i.type !== "task_complete" && i.type !== "task_skip") ||
+            i.payload.taskId !== taskId,
+        );
+        await saveQueue(dedupeQueue([...withoutTask, next]));
+      }
+      await refreshCount();
     },
-    [],
+    [refreshCount],
   );
 
   const flush = useCallback(async () => {
     if (!token || flushing) return;
-    const items = await loadQueue();
+    const items = dedupeQueue(await loadQueue());
     if (items.length === 0) return;
 
     setFlushing(true);
@@ -80,7 +119,10 @@ export function useOfflineQueue(token: string | null | undefined) {
         } else if (item.type === "task_skip") {
           await skipTask(token, item.payload.taskId, item.payload.reason);
         }
-      } catch {
+      } catch (error) {
+        if (isStaleError(error)) {
+          continue;
+        }
         remaining.push(item);
       }
     }
@@ -105,11 +147,26 @@ export function useOfflineQueue(token: string | null | undefined) {
 }
 
 export async function enqueueOfflineItem(item: Omit<OfflineQueueItem, "id" | "createdAt">) {
-  const items = await loadQueue();
-  items.push({
+  const items = dedupeQueue(await loadQueue());
+  const next = {
     ...item,
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     createdAt: new Date().toISOString(),
-  } as OfflineQueueItem);
-  await saveQueue(items);
+  } as OfflineQueueItem;
+
+  if (item.type === "checkin") {
+    await saveQueue(dedupeQueue([...items.filter((i) => i.type !== "checkin"), next]));
+  } else {
+    const taskId = item.payload.taskId;
+    await saveQueue(
+      dedupeQueue([
+        ...items.filter(
+          (i) =>
+            (i.type !== "task_complete" && i.type !== "task_skip") ||
+            i.payload.taskId !== taskId,
+        ),
+        next,
+      ]),
+    );
+  }
 }

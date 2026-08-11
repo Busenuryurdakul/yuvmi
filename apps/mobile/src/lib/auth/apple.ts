@@ -3,7 +3,7 @@ import { Platform } from "react-native";
 import type { OAuthProfile } from "./types";
 
 type AppleSignInResult =
-  | { ok: true; user: OAuthProfile }
+  | { ok: true; user: OAuthProfile; identityToken: string }
   | { ok: false; reason: "cancelled" | "unavailable" | "failed"; message?: string };
 
 export async function signInWithAppleNative(): Promise<AppleSignInResult> {
@@ -29,8 +29,13 @@ export async function signInWithAppleNative(): Promise<AppleSignInResult> {
       .join(" ")
       .trim();
 
+    if (!credential.identityToken) {
+      return { ok: false, reason: "failed", message: "Apple kimlik jetonu alınamadı." };
+    }
+
     return {
       ok: true,
+      identityToken: credential.identityToken,
       user: {
         id: credential.user,
         email: credential.email ?? "apple-user@yuvmi.app",

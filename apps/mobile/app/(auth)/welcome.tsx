@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { router } from "expo-router";
 import { APP_NAME, APP_TAGLINE } from "@yuvmi/shared";
 import { Screen } from "@/components/ui/Screen";
 import { Button } from "@/components/ui/Button";
@@ -74,6 +75,11 @@ export default function WelcomeScreen() {
               {mode === "login" ? "Hesabın yok mu? Kayıt ol" : "Zaten hesabın var mı? Giriş yap"}
             </Text>
           </Pressable>
+          {mode === "login" ? (
+            <Pressable onPress={() => router.push("/settings/forgot-password")}>
+              <Text style={styles.switchMode}>Şifreni mi unuttun?</Text>
+            </Pressable>
+          ) : null}
         </Card>
 
         <Card title="veya" subtitle="OAuth ile devam">

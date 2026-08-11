@@ -202,6 +202,13 @@ type PlanDiffResponse struct {
 	Added       []PlanStepResponse `json:"added"`
 	Removed     []PlanStepResponse `json:"removed"`
 	Changed     []PlanStepResponse `json:"changed"`
+	ChangedPairs []PlanStepPairResponse `json:"changedPairs"`
+}
+
+type PlanStepPairResponse struct {
+	DayOffset int              `json:"dayOffset"`
+	From      PlanStepResponse `json:"from"`
+	To        PlanStepResponse `json:"to"`
 }
 
 type RegisterPushTokenRequest struct {
@@ -315,15 +322,21 @@ type PremiumUsageResponse struct {
 type SubscriptionResponse struct {
 	Tier             string                `json:"tier"`
 	Status           string                `json:"status"`
+	PremiumActive    bool                  `json:"premiumActive"`
 	Limits           PremiumLimitsResponse `json:"limits"`
 	Usage            PremiumUsageResponse  `json:"usage"`
 	Provider         *string               `json:"provider,omitempty"`
 	CurrentPeriodEnd *string               `json:"currentPeriodEnd,omitempty"`
 }
 
+type CheckoutSessionResponse struct {
+	URL string `json:"url"`
+}
+
 type DataExportResponse struct {
 	Filename string          `json:"filename"`
 	MimeType string          `json:"mimeType"`
+	Encoding string          `json:"encoding,omitempty"`
 	Data     json.RawMessage `json:"data"`
 }
 

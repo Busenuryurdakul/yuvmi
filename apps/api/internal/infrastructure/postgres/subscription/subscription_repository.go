@@ -22,6 +22,41 @@ func (r *SubscriptionRepo) GetByUserID(ctx context.Context, userID uuid.UUID) (*
 		FROM subscriptions WHERE user_id=$1`, userID))
 }
 
+func (r *SubscriptionRepo) GetByProviderSubscriptionID(ctx context.Context, providerSubID string) (*model.Subscription, error) {
+	return r.scan(r.db.QueryRow(ctx, `
+		SELECT id, user_id, tier, status, provider, provider_subscription_id, current_period_end, created_at, updated_at
+		FROM subscriptions WHERE provider_subscription_id=$1`, providerSubID))
+}
+
+func (r *SubscriptionRepo) ListExpiredPremium(ctx context.Context, now time.Time) ([]*model.Subscription, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT id, user_id, tier, status, provider, provider_subscription_id, current_period_end, created_at, updated_at
+		FROM subscriptions
+		WHERE tier='premium'
+		  AND current_period_end IS NOT NULL
+		  AND current_period_end <= $1
+		  AND status IN ('active', 'cancelled', 'past_due')`, now)
+	if err != nil {
+		return nil, domainErr.New(domainErr.ErrInternal, "failed to list expired subscriptions", err)
+	}
+	defer rows.Close()
+
+	var subs []*model.Subscription
+	for rows.Next() {
+		var s model.Subscription
+		var provider *string
+		if err := rows.Scan(&s.ID, &s.UserID, &s.Tier, &s.Status, &provider, &s.ProviderSubscriptionID, &s.CurrentPeriodEnd, &s.CreatedAt, &s.UpdatedAt); err != nil {
+			return nil, domainErr.New(domainErr.ErrInternal, "failed to scan subscription", err)
+		}
+		if provider != nil {
+			p := model.SubscriptionProvider(*provider)
+			s.Provider = &p
+		}
+		subs = append(subs, &s)
+	}
+	return subs, rows.Err()
+}
+
 func (r *SubscriptionRepo) Upsert(ctx context.Context, sub *model.Subscription) error {
 	if sub.ID == uuid.Nil {
 		sub.ID = uuid.New()

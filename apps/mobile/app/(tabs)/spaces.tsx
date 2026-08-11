@@ -9,6 +9,9 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useAuth } from "@/context/AuthContext";
+import { useSubscription } from "@/hooks/useSubscription";
+import { promptPremiumUpsell } from "@/hooks/usePremiumUpsell";
+import { PremiumGate } from "@/components/premium/PremiumGate";
 import {
   acceptSpaceInvite,
   createSpace,
@@ -30,6 +33,7 @@ const statusLabel: Record<string, string> = {
 
 export default function SpacesScreen() {
   const { user } = useAuth();
+  const { subscription, isPremium } = useSubscription();
   const [spaces, setSpaces] = useState<SpaceResponse[]>([]);
   const [invites, setInvites] = useState<PendingSpaceInviteResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,7 +61,9 @@ export default function SpacesScreen() {
       const space = await createSpace(user.token, { type });
       router.push(`/spaces/${space.id}`);
     } catch (e) {
-      Alert.alert("Hata", e instanceof Error ? e.message : "Alan oluşturulamadı.");
+      if (!promptPremiumUpsell(e, { feature: "Ek ortak alan oluşturma" })) {
+        Alert.alert("Hata", e instanceof Error ? e.message : "Alan oluşturulamadı.");
+      }
     } finally {
       setCreating(null);
     }
@@ -89,6 +95,8 @@ export default function SpacesScreen() {
   const spacesByType = Object.fromEntries(spaces.map((s) => [s.type, s])) as Partial<
     Record<SpaceType, SpaceResponse>
   >;
+  const ownedSpaceCount = subscription?.usage.spaces ?? spaces.length;
+  const atSpaceLimit = !isPremium && ownedSpaceCount >= (subscription?.limits.maxSpaces ?? 1);
 
   return (
     <Screen>
@@ -145,6 +153,13 @@ export default function SpacesScreen() {
                   <Text style={styles.chevron}>→</Text>
                 </View>
               </Pressable>
+            ) : atSpaceLimit ? (
+              <PremiumGate
+                feature="Ek ortak alan"
+                description="Ücretsiz planda bir ortak alan oluşturabilirsin. Çift, arkadaş ve aile alanlarını birlikte kullanmak için Premium'a geç."
+              >
+                <Button label="Alan oluştur" variant="secondary" disabled onPress={() => {}} />
+              </PremiumGate>
             ) : (
               <Button
                 label="Alan oluştur"

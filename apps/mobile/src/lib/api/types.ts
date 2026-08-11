@@ -7,6 +7,7 @@ export type ApiErrorBody = {
 
 export type LoginResponse = {
   token: string;
+  refresh_token: string;
   user: {
     id: string;
     email: string;
@@ -142,6 +143,11 @@ export type PlanDiffResponse = {
   added: PlanResponse["steps"];
   removed: PlanResponse["steps"];
   changed: PlanResponse["steps"];
+  changedPairs?: Array<{
+    dayOffset: number;
+    from: PlanResponse["steps"][number];
+    to: PlanResponse["steps"][number];
+  }>;
 };
 
 export type NotificationResponse = {
@@ -230,14 +236,20 @@ export type PremiumUsageResponse = {
 export type SubscriptionResponse = {
   tier: "free" | "premium";
   status: "active" | "cancelled" | "past_due";
+  premiumActive: boolean;
   limits: PremiumLimitsResponse;
   usage: PremiumUsageResponse;
   provider?: string;
   currentPeriodEnd?: string;
 };
 
+export type CheckoutSessionResponse = {
+  url: string;
+};
+
 export type DataExportResponse = {
   filename: string;
   mimeType: string;
-  data: Record<string, unknown>;
+  encoding?: "base64" | "json";
+  data: string;
 };

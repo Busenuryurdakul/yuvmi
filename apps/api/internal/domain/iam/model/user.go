@@ -17,14 +17,16 @@ const (
 
 // User represents a platform user entity.
 type User struct {
-	ID           uuid.UUID  `json:"id"`
-	Email        string     `json:"email"`
-	PasswordHash string     `json:"-"`
-	FirstName    string     `json:"first_name"`
-	LastName     string     `json:"last_name"`
-	Status       UserStatus `json:"status"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
+	ID              uuid.UUID  `json:"id"`
+	Email           string     `json:"email"`
+	PasswordHash    string     `json:"-"`
+	FirstName       string     `json:"first_name"`
+	LastName        string     `json:"last_name"`
+	AuthProvider    string     `json:"auth_provider,omitempty"`
+	ProviderSubject string     `json:"provider_subject,omitempty"`
+	Status          UserStatus `json:"status"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
 }
 
 // FullName returns the user's full name.

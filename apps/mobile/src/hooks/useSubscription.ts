@@ -33,7 +33,7 @@ export function useSubscription() {
     void refresh();
   }, [refresh]);
 
-  const isPremium = subscription?.tier === "premium" && subscription.status === "active";
+  const isPremium = subscription?.premiumActive ?? false;
 
   return { subscription, loading, error, isPremium, refresh };
 }

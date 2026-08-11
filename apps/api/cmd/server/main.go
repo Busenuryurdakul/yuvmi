@@ -58,6 +58,7 @@ import (
 	pgSubscription "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/subscription"
 	infraStorage "github.com/masterfabric-go/masterfabric/internal/infrastructure/storage"
 	infraNotify "github.com/masterfabric-go/masterfabric/internal/infrastructure/notification"
+	"github.com/masterfabric-go/masterfabric/internal/infrastructure/scheduler"
 )
 
 func main() {
@@ -121,7 +122,15 @@ func run() error {
 	defer func() { _ = eventBus.Close() }()
 
 	// Build dependencies
-	deps := buildDependencies(log, cfg, db, redisClient, eventBus)
+	deps, yuvmiSvc := buildDependencies(log, cfg, db, redisClient, eventBus)
+
+	// Start push notification cron
+	if yuvmiSvc != nil && db != nil {
+		notificationRepo := pgProfile.NewNotificationRepo(db)
+		pushCron := scheduler.NewPushCron(yuvmiSvc, notificationRepo, cfg.Cron, log)
+		pushCron.Start(context.Background())
+		defer pushCron.Stop()
+	}
 
 	// Build router
 	r := router.New(deps)
@@ -209,7 +218,7 @@ func buildDependencies(
 	db *pgxpool.Pool,
 	redisClient *redis.Client,
 	eventBus events.EventBus,
-) router.Dependencies {
+) (router.Dependencies, *yuvmiUC.Service) {
 	deps := router.Dependencies{
 		Logger:             log,
 		DB:                 db,
@@ -220,11 +229,13 @@ func buildDependencies(
 
 	if db == nil {
 		log.Warn("database not available, API endpoints will not work")
-		return deps
+		return deps, nil
 	}
 
 	// --- Repositories ---
 	userRepo := pgIam.NewUserRepo(db)
+	refreshTokenRepo := pgIam.NewRefreshTokenRepo(db)
+	passwordResetRepo := pgIam.NewPasswordResetRepo(db)
 	roleRepo := pgIam.NewRoleRepo(db)
 	orgRepo := pgTenant.NewOrgRepo(db)
 	workspaceRepo := pgTenant.NewWorkspaceRepository(db)
@@ -236,6 +247,7 @@ func buildDependencies(
 
 	// --- Services ---
 	jwtService := infraAuth.NewJWTService(cfg.JWT)
+	oauthVerifier := infraAuth.NewOAuthVerifier(cfg.OAuth.GoogleClientIDs, cfg.OAuth.AppleBundleID)
 	rbacService := infraAuth.NewRBACService(roleRepo, redisClient)
 
 	deps.AuthService = jwtService
@@ -243,9 +255,16 @@ func buildDependencies(
 	deps.OrgRepo = orgRepo
 	deps.WorkspaceRepo = workspaceRepo
 
+	tokenIssuer := iamUC.NewTokenIssuer(jwtService, jwtService.RefreshExpiration(), refreshTokenRepo)
+
 	// --- Use cases (with event bus for domain event publishing) ---
-	registerUC := iamUC.NewRegisterUseCase(userRepo, jwtService, eventBus)
-	loginUC := iamUC.NewLoginUseCase(userRepo, jwtService)
+	registerUC := iamUC.NewRegisterUseCase(userRepo, jwtService, eventBus, cfg.Yuvmi)
+	loginUC := iamUC.NewLoginUseCase(userRepo, jwtService, tokenIssuer, cfg.Yuvmi)
+	oauthUC := iamUC.NewOAuthLoginUseCase(userRepo, oauthVerifier, tokenIssuer)
+	refreshUC := iamUC.NewRefreshTokenUseCase(userRepo, jwtService, refreshTokenRepo, tokenIssuer)
+	forgotPasswordUC := iamUC.NewForgotPasswordUseCase(userRepo, jwtService, passwordResetRepo, cfg.Yuvmi, cfg.SMTP, log)
+	resetPasswordUC := iamUC.NewResetPasswordUseCase(userRepo, jwtService, passwordResetRepo, refreshTokenRepo)
+	deleteAccountUC := iamUC.NewDeleteAccountUseCase(userRepo, jwtService, refreshTokenRepo)
 	assignRoleUC := iamUC.NewAssignRoleUseCase(roleRepo, rbacService, eventBus)
 	createOrgUC := tenantUC.NewCreateOrgUseCase(orgRepo, eventBus)
 	createWorkspaceUC := tenantUC.NewCreateWorkspaceUseCase(workspaceRepo, orgRepo, eventBus)
@@ -276,7 +295,11 @@ func buildDependencies(
 	})
 
 	// --- Handlers ---
-	deps.IAMHandler = iamHandler.NewHandler(registerUC, loginUC, assignRoleUC, userRepo)
+	deps.IAMHandler = iamHandler.NewHandler(
+		registerUC, loginUC, oauthUC, refreshUC,
+		forgotPasswordUC, resetPasswordUC, deleteAccountUC,
+		assignRoleUC, userRepo,
+	)
 	deps.TenantHandler = tenantHandler.NewHandler(
 		createOrgUC,
 		createAppUC,
@@ -374,8 +397,8 @@ func buildDependencies(
 	}
 	pushClient := infraNotify.NewExpoPushClient()
 	engine := alignment.NewEngine(taskRepo, checkinRepo, goalRepo, planRepo, alignmentRepo)
-	yuvmiSvc := yuvmiUC.NewService(userRepo, profilePG, profilePG, futureSelfRepo, goalRepo, planRepo, taskRepo, checkinRepo, alignmentRepo, reviewRepo, notificationRepo, spaceRepo, assetRepo, subscriptionRepo, objectStorage, engine, pushClient)
+	yuvmiSvc := yuvmiUC.NewService(userRepo, profilePG, profilePG, futureSelfRepo, goalRepo, planRepo, taskRepo, checkinRepo, alignmentRepo, reviewRepo, notificationRepo, spaceRepo, assetRepo, subscriptionRepo, objectStorage, engine, pushClient, cfg.Yuvmi)
 	deps.YuvmiHandler = yuvmiHandlerPkg.NewHandler(yuvmiSvc)
 
-	return deps
+	return deps, yuvmiSvc
 }
