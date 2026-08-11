@@ -15,20 +15,32 @@ import (
 	goalRepo "github.com/masterfabric-go/masterfabric/internal/domain/goal/repository"
 	"github.com/masterfabric-go/masterfabric/internal/domain/profile/model"
 	profileRepo "github.com/masterfabric-go/masterfabric/internal/domain/profile/repository"
+	assetRepo "github.com/masterfabric-go/masterfabric/internal/domain/asset/repository"
+	spaceRepo "github.com/masterfabric-go/masterfabric/internal/domain/space/repository"
+	subRepo "github.com/masterfabric-go/masterfabric/internal/domain/subscription/repository"
 	pgProfile "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/profile"
+	infraNotify "github.com/masterfabric-go/masterfabric/internal/infrastructure/notification"
+	"github.com/masterfabric-go/masterfabric/internal/infrastructure/storage"
 )
 
 type Service struct {
-	users      iamRepo.UserRepository
-	profiles   profileRepo.ProfileRepository
-	profilePG  *pgProfile.ProfileRepo
-	futureSelf fsRepo.FutureSelfRepository
-	goals      goalRepo.GoalRepository
-	plans      goalRepo.PlanRepository
-	tasks      goalRepo.TaskRepository
-	checkins   profileRepo.CheckinRepository
-	alignment  profileRepo.AlignmentRepository
-	engine     *alignment.Engine
+	users         iamRepo.UserRepository
+	profiles      profileRepo.ProfileRepository
+	profilePG     *pgProfile.ProfileRepo
+	futureSelf    fsRepo.FutureSelfRepository
+	goals         goalRepo.GoalRepository
+	plans         goalRepo.PlanRepository
+	tasks         goalRepo.TaskRepository
+	checkins      profileRepo.CheckinRepository
+	alignment     profileRepo.AlignmentRepository
+	reviews       goalRepo.WeeklyReviewRepository
+	notifications profileRepo.NotificationRepository
+	spaces        spaceRepo.SpaceRepository
+	assets        assetRepo.AssetRepository
+	subscriptions subRepo.SubscriptionRepository
+	storage       storage.ObjectStorage
+	engine        *alignment.Engine
+	push          *infraNotify.ExpoPushClient
 }
 
 func NewService(
@@ -41,12 +53,21 @@ func NewService(
 	tasks goalRepo.TaskRepository,
 	checkins profileRepo.CheckinRepository,
 	alignment profileRepo.AlignmentRepository,
+	reviews goalRepo.WeeklyReviewRepository,
+	notifications profileRepo.NotificationRepository,
+	spaces spaceRepo.SpaceRepository,
+	assets assetRepo.AssetRepository,
+	subscriptions subRepo.SubscriptionRepository,
+	store storage.ObjectStorage,
 	engine *alignment.Engine,
+	push *infraNotify.ExpoPushClient,
 ) *Service {
 	return &Service{
 		users: users, profiles: profiles, profilePG: profilePG,
 		futureSelf: futureSelf, goals: goals, plans: plans, tasks: tasks,
-		checkins: checkins, alignment: alignment, engine: engine,
+		checkins: checkins, alignment: alignment, reviews: reviews,
+		notifications: notifications, spaces: spaces, assets: assets,
+		subscriptions: subscriptions, storage: store, engine: engine, push: push,
 	}
 }
 
@@ -156,6 +177,9 @@ func (s *Service) ApproveFutureSelf(ctx context.Context, userID uuid.UUID) (*dto
 }
 
 func (s *Service) CreateGoal(ctx context.Context, userID uuid.UUID, req dto.CreateGoalRequest) (*dto.GoalResponse, error) {
+	if err := s.checkGoalLimit(ctx, userID); err != nil {
+		return nil, err
+	}
 	goal := &goalmodel.Goal{
 		UserID: userID, FutureSelfID: req.FutureSelfID,
 		Title: req.Title, Description: req.Description, Status: goalmodel.GoalDraft,

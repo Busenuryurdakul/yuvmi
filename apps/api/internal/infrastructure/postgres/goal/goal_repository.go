@@ -71,6 +71,15 @@ func (r *GoalRepo) scanGoal(row pgx.Row) (*model.Goal, error) {
 	return &g, nil
 }
 
+func (r *GoalRepo) CountByUserID(ctx context.Context, userID uuid.UUID) (int, error) {
+	var count int
+	err := r.db.QueryRow(ctx, `SELECT COUNT(*) FROM goals WHERE user_id=$1 AND status != 'archived'`, userID).Scan(&count)
+	if err != nil {
+		return 0, domainErr.New(domainErr.ErrInternal, "failed to count goals", err)
+	}
+	return count, nil
+}
+
 type PlanRepo struct{ db *pgxpool.Pool }
 
 func NewPlanRepo(db *pgxpool.Pool) *PlanRepo { return &PlanRepo{db: db} }
@@ -148,6 +157,42 @@ func (r *PlanRepo) SupersedeOthers(ctx context.Context, userID, planID uuid.UUID
 		UPDATE plans SET status='superseded', updated_at=NOW()
 		WHERE user_id=$1 AND id<>$2 AND status='active'`, userID, planID)
 	return err
+}
+
+func (r *PlanRepo) ListByUserID(ctx context.Context, userID uuid.UUID) ([]*model.Plan, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT id, user_id, goal_id, title, description, status, version, created_at, updated_at
+		FROM plans WHERE user_id=$1 ORDER BY version DESC, created_at DESC`, userID)
+	if err != nil {
+		return nil, domainErr.New(domainErr.ErrInternal, "failed to list plans", err)
+	}
+	defer rows.Close()
+
+	var plans []*model.Plan
+	for rows.Next() {
+		p, err := r.scanPlan(rows)
+		if err != nil {
+			return nil, err
+		}
+		p, err = r.attachSteps(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		plans = append(plans, p)
+	}
+	return plans, nil
+}
+
+func (r *PlanRepo) GetMaxVersion(ctx context.Context, userID uuid.UUID, goalID *uuid.UUID) (int, error) {
+	var maxVersion int
+	if goalID != nil {
+		err := r.db.QueryRow(ctx, `
+			SELECT COALESCE(MAX(version), 0) FROM plans WHERE user_id=$1 AND goal_id=$2`, userID, *goalID).Scan(&maxVersion)
+		return maxVersion, err
+	}
+	err := r.db.QueryRow(ctx, `
+		SELECT COALESCE(MAX(version), 0) FROM plans WHERE user_id=$1`, userID).Scan(&maxVersion)
+	return maxVersion, err
 }
 
 func (r *PlanRepo) scanPlan(row pgx.Row) (*model.Plan, error) {

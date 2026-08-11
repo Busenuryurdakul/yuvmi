@@ -1,12 +1,12 @@
 import * as Google from "expo-auth-session/providers/google";
 import * as WebBrowser from "expo-web-browser";
 import { isGoogleConfigured } from "./session";
-import type { AuthUser } from "./types";
+import type { OAuthProfile } from "./types";
 
 WebBrowser.maybeCompleteAuthSession();
 
 type GoogleSignInResult =
-  | { ok: true; user: AuthUser }
+  | { ok: true; user: OAuthProfile }
   | { ok: false; reason: "cancelled" | "unconfigured" | "failed"; message?: string };
 
 export function useGoogleAuthRequest() {
@@ -73,7 +73,7 @@ export async function promptGoogleSignIn(
   };
 }
 
-export function createDevGoogleUser(): AuthUser {
+export function createDevGoogleUser(): OAuthProfile {
   return {
     id: "dev-google-user",
     email: "dev@yuvmi.app",

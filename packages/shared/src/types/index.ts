@@ -59,3 +59,12 @@ export type {
   LoginResponse,
   UserProfileResponse,
 } from "./api";
+
+export type {
+  SubscriptionTier,
+  SubscriptionStatus,
+  SubscriptionProvider,
+  Subscription,
+  PremiumLimits,
+  PremiumUsage,
+} from "./subscription";

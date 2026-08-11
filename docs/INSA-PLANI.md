@@ -203,12 +203,12 @@ app/
 
 ### 1.6 Faz 1 çıkış kriterleri
 
-- [ ] Kullanıcı OAuth ile giriş yapar (gerçek backend)
-- [ ] Onboarding'i tamamlar (Future Self → Goal → Plan)
-- [ ] Bugün ekranında check-in yapar
-- [ ] Günlük görevi tamamlar veya atlar
-- [ ] Hizalanma skoru faktörleriyle görünür
-- [ ] `npm run typecheck` temiz (web + mobile + shared)
+- [x] Kullanıcı OAuth ile giriş yapar (gerçek backend — dev köprüsü)
+- [x] Onboarding'i tamamlar (Future Self → Goal → Plan)
+- [x] Bugün ekranında check-in yapar
+- [x] Günlük görevi tamamlar veya atlar
+- [x] Hizalanma skoru faktörleriyle görünür
+- [x] `npm run typecheck` temiz (web + mobile + shared)
 
 ---
 
@@ -218,7 +218,7 @@ app/
 
 **Tahmini süre:** 2–3 hafta
 
-| Görev | Detay |
+| Görev | Çıktı |
 |-------|-------|
 | WeeklyReview API | Metrik agregasyonu (AI yok) |
 | Plan versiyonlama | `superseded` status, diff UI |
@@ -229,9 +229,9 @@ app/
 
 ### Faz 2 çıkış kriterleri
 
-- [ ] 7 günlük kullanımda haftalık review otomatik oluşur
-- [ ] Plan v2 onaylanabilir
-- [ ] Push bildirimi gelir (test cihaz)
+- [x] 7 günlük kullanımda haftalık review otomatik oluşur
+- [x] Plan v2 onaylanabilir
+- [x] Push bildirimi gelir (test cihaz)
 
 ---
 
@@ -379,8 +379,8 @@ feat/api-alignment
 | Milestone | Hedef | Kapsam |
 |-----------|-------|--------|
 | **M0** | ✅ Tamamlandı | Mobil shell, shared types, tokens |
-| **M1** | +4–6 hf | Faz 1 — uçtan uca manuel MVP |
-| **M2** | +2–3 hf | Faz 2 — haftalık döngü |
+| **M1** | ✅ Tamamlandı | Faz 1 — uçtan uca manuel MVP |
+| **M2** | ✅ Tamamlandı | Faz 2 — haftalık döngü & bildirimler |
 | **M3** | +3–4 hf | Faz 3 — sosyal |
 | **M4** | +2–3 hf | Faz 4 — premium |
 | **M5** | +4–6 hf | Faz 5 — AI çekirdek |
@@ -391,6 +391,7 @@ feat/api-alignment
 
 | Dosya | İçerik |
 |-------|--------|
+| [`TEKNIK-BORC.md`](./TEKNIK-BORC.md) | Bilinçli ertelemeler, pre-prod borçlar |
 | [`PRODUCT.md`](./PRODUCT.md) | Ürün vizyonu, rakipler, premium |
 | [`PRD.md`](./PRD.md) | Tam UX/UI/veri mimarisi (AI hariç MVP) |
 | [`PRD-AI.md`](./PRD-AI.md) | AI fazı gereksinimleri |

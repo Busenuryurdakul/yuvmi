@@ -140,3 +140,25 @@ func (r *AlignmentRepo) ListHistory(ctx context.Context, userID uuid.UUID, limit
 	}
 	return out, nil
 }
+
+func (r *AlignmentRepo) ListSince(ctx context.Context, userID uuid.UUID, since time.Time) ([]*model.AlignmentSnapshot, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT id, user_id, date, overall_score, factors, summary_explanation, goal_id, plan_id, created_at
+		FROM alignment_snapshots WHERE user_id=$1 AND date >= $2 ORDER BY date DESC`, userID, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*model.AlignmentSnapshot
+	for rows.Next() {
+		var s model.AlignmentSnapshot
+		var factorsJSON []byte
+		if err := rows.Scan(&s.ID, &s.UserID, &s.Date, &s.OverallScore, &factorsJSON, &s.SummaryExplanation, &s.GoalID, &s.PlanID, &s.CreatedAt); err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal(factorsJSON, &s.Factors)
+		out = append(out, &s)
+	}
+	return out, nil
+}

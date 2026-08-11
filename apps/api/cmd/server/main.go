@@ -53,6 +53,11 @@ import (
 	pgFutureSelf "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/futureself"
 	pgGoal "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/goal"
 	pgProfile "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/profile"
+	pgSpace "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/space"
+	pgAsset "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/asset"
+	pgSubscription "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/subscription"
+	infraStorage "github.com/masterfabric-go/masterfabric/internal/infrastructure/storage"
+	infraNotify "github.com/masterfabric-go/masterfabric/internal/infrastructure/notification"
 )
 
 func main() {
@@ -354,8 +359,22 @@ func buildDependencies(
 	taskRepo := pgGoal.NewTaskRepo(db)
 	checkinRepo := pgProfile.NewCheckinRepo(db)
 	alignmentRepo := pgProfile.NewAlignmentRepo(db)
+	reviewRepo := pgGoal.NewWeeklyReviewRepo(db)
+	notificationRepo := pgProfile.NewNotificationRepo(db)
+	spaceRepo := pgSpace.NewSpaceRepo(db)
+	assetRepo := pgAsset.NewAssetRepo(db)
+	subscriptionRepo := pgSubscription.NewSubscriptionRepo(db)
+	publicBase := fmt.Sprintf("http://%s:%d/api/v1/assets", cfg.Server.Host, cfg.Server.Port)
+	if cfg.Server.Host == "0.0.0.0" {
+		publicBase = fmt.Sprintf("http://localhost:%d/api/v1/assets", cfg.Server.Port)
+	}
+	objectStorage, err := infraStorage.NewFromEnv(publicBase)
+	if err != nil {
+		log.Warn("object storage init failed, uploads disabled", "error", err)
+	}
+	pushClient := infraNotify.NewExpoPushClient()
 	engine := alignment.NewEngine(taskRepo, checkinRepo, goalRepo, planRepo, alignmentRepo)
-	yuvmiSvc := yuvmiUC.NewService(userRepo, profilePG, profilePG, futureSelfRepo, goalRepo, planRepo, taskRepo, checkinRepo, alignmentRepo, engine)
+	yuvmiSvc := yuvmiUC.NewService(userRepo, profilePG, profilePG, futureSelfRepo, goalRepo, planRepo, taskRepo, checkinRepo, alignmentRepo, reviewRepo, notificationRepo, spaceRepo, assetRepo, subscriptionRepo, objectStorage, engine, pushClient)
 	deps.YuvmiHandler = yuvmiHandlerPkg.NewHandler(yuvmiSvc)
 
 	return deps

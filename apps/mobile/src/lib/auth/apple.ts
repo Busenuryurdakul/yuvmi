@@ -1,9 +1,9 @@
 import * as AppleAuthentication from "expo-apple-authentication";
 import { Platform } from "react-native";
-import type { AuthUser } from "./types";
+import type { OAuthProfile } from "./types";
 
 type AppleSignInResult =
-  | { ok: true; user: AuthUser }
+  | { ok: true; user: OAuthProfile }
   | { ok: false; reason: "cancelled" | "unavailable" | "failed"; message?: string };
 
 export async function signInWithAppleNative(): Promise<AppleSignInResult> {
@@ -55,7 +55,7 @@ export async function signInWithAppleNative(): Promise<AppleSignInResult> {
   }
 }
 
-export function createDevAppleUser(): AuthUser {
+export function createDevAppleUser(): OAuthProfile {
   return {
     id: "dev-apple-user",
     email: "dev@yuvmi.app",

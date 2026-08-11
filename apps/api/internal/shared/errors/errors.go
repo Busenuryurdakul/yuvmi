@@ -16,8 +16,9 @@ var (
 	ErrInternal       = errors.New("internal error")
 	ErrBadRequest     = errors.New("bad request")
 	ErrConflict       = errors.New("conflict")
-	ErrRateLimited    = errors.New("rate limited")
-	ErrNotImplemented = errors.New("not implemented")
+	ErrRateLimited      = errors.New("rate limited")
+	ErrNotImplemented   = errors.New("not implemented")
+	ErrPaymentRequired  = errors.New("payment required")
 )
 
 // DomainError is a structured error with an underlying cause and a message.
@@ -70,6 +71,8 @@ func HTTPStatusCode(err error) int {
 		return http.StatusTooManyRequests
 	case errors.Is(err, ErrNotImplemented):
 		return http.StatusNotImplemented
+	case errors.Is(err, ErrPaymentRequired):
+		return http.StatusPaymentRequired
 	default:
 		return http.StatusInternalServerError
 	}

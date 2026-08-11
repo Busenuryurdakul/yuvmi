@@ -27,6 +27,10 @@ func YuvmiCreated(w http.ResponseWriter, payload any) {
 	YuvmiData(w, http.StatusCreated, payload)
 }
 
+func YuvmiNoContent(w http.ResponseWriter) {
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func YuvmiFail(w http.ResponseWriter, err error) {
 	code := domainErr.HTTPStatusCode(err)
 	msg := err.Error()

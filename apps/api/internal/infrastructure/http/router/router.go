@@ -119,8 +119,27 @@ func New(deps Dependencies) *chi.Mux {
 
 				r.Route("/plans", func(r chi.Router) {
 					r.Post("/", deps.YuvmiHandler.CreatePlan)
+					r.Get("/", deps.YuvmiHandler.ListPlans)
+					r.Post("/revise", deps.YuvmiHandler.RevisePlan)
 					r.Get("/active", deps.YuvmiHandler.GetActivePlan)
+					r.Get("/{fromId}/diff/{toId}", deps.YuvmiHandler.GetPlanDiff)
+					r.Get("/{id}", deps.YuvmiHandler.GetPlan)
 					r.Post("/{id}/activate", deps.YuvmiHandler.ActivatePlan)
+				})
+
+				r.Route("/weekly-reviews", func(r chi.Router) {
+					r.Get("/current", deps.YuvmiHandler.GetCurrentWeeklyReview)
+					r.Get("/", deps.YuvmiHandler.ListWeeklyReviews)
+					r.Patch("/{id}", deps.YuvmiHandler.UpdateWeeklyReview)
+					r.Post("/{id}/apply", deps.YuvmiHandler.ApplyWeeklyReview)
+				})
+
+				r.Route("/notifications", func(r chi.Router) {
+					r.Post("/token", deps.YuvmiHandler.RegisterPushToken)
+					r.Post("/test", deps.YuvmiHandler.SendTestPush)
+					r.Get("/", deps.YuvmiHandler.ListNotifications)
+					r.Get("/unread-count", deps.YuvmiHandler.GetUnreadNotificationCount)
+					r.Post("/{id}/read", deps.YuvmiHandler.MarkNotificationRead)
 				})
 
 				r.Route("/tasks", func(r chi.Router) {
@@ -138,6 +157,34 @@ func New(deps Dependencies) *chi.Mux {
 					r.Get("/today", deps.YuvmiHandler.GetTodayAlignment)
 					r.Get("/history", deps.YuvmiHandler.GetAlignmentHistory)
 				})
+
+				r.Route("/spaces", func(r chi.Router) {
+					r.Get("/", deps.YuvmiHandler.ListSpaces)
+					r.Post("/", deps.YuvmiHandler.CreateSpace)
+					r.Get("/invites/pending", deps.YuvmiHandler.ListPendingSpaceInvites)
+					r.Post("/invites/{id}/accept", deps.YuvmiHandler.AcceptSpaceInvite)
+					r.Post("/invites/{id}/decline", deps.YuvmiHandler.DeclineSpaceInvite)
+					r.Get("/{id}/assets", deps.YuvmiHandler.ListSpaceAssets)
+					r.Get("/{id}", deps.YuvmiHandler.GetSpace)
+					r.Post("/{id}/invites", deps.YuvmiHandler.CreateSpaceInvite)
+					r.Post("/{id}/leave", deps.YuvmiHandler.LeaveSpace)
+				})
+
+				r.Route("/assets", func(r chi.Router) {
+					r.Get("/", deps.YuvmiHandler.ListMyAssets)
+					r.Post("/upload", deps.YuvmiHandler.UploadAsset)
+					r.Get("/{id}/content", deps.YuvmiHandler.GetAssetContent)
+					r.Get("/{id}", deps.YuvmiHandler.GetAsset)
+					r.Patch("/{id}/share", deps.YuvmiHandler.ShareAsset)
+					r.Post("/{id}/revoke-from-space", deps.YuvmiHandler.RevokeAssetFromSpace)
+				})
+
+				r.Route("/subscription", func(r chi.Router) {
+					r.Get("/", deps.YuvmiHandler.GetSubscription)
+					r.Post("/dev-upgrade", deps.YuvmiHandler.DevUpgradeSubscription)
+				})
+
+				r.Get("/export", deps.YuvmiHandler.ExportUserData)
 			}
 		})
 

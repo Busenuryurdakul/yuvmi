@@ -24,4 +24,14 @@ type AlignmentRepository interface {
 	GetByDate(ctx context.Context, userID uuid.UUID, date time.Time) (*model.AlignmentSnapshot, error)
 	Upsert(ctx context.Context, snapshot *model.AlignmentSnapshot) error
 	ListHistory(ctx context.Context, userID uuid.UUID, limit int) ([]*model.AlignmentSnapshot, error)
+	ListSince(ctx context.Context, userID uuid.UUID, since time.Time) ([]*model.AlignmentSnapshot, error)
+}
+
+type NotificationRepository interface {
+	UpsertToken(ctx context.Context, token *model.NotificationToken) error
+	ListTokens(ctx context.Context, userID uuid.UUID) ([]*model.NotificationToken, error)
+	CreateNotification(ctx context.Context, n *model.InAppNotification) error
+	ListNotifications(ctx context.Context, userID uuid.UUID, limit int) ([]*model.InAppNotification, error)
+	MarkRead(ctx context.Context, userID, notificationID uuid.UUID) error
+	CountUnread(ctx context.Context, userID uuid.UUID) (int, error)
 }

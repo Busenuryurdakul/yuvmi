@@ -1,108 +1,66 @@
-import { StyleSheet, Text, View } from "react-native";
-import { LIFE_DOMAINS } from "@yuvmi/shared";
+import { useEffect, useState } from "react";
+import { StyleSheet, Text } from "react-native";
 import { Screen } from "@/components/ui/Screen";
 import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { LoadingScreen } from "@/components/ui/LoadingScreen";
+import { useAuth } from "@/context/AuthContext";
+import { fetchFutureSelf } from "@/lib/api/yuvmi";
+import type { FutureSelfResponse } from "@/lib/api/types";
+import { LIFE_DOMAINS } from "@yuvmi/shared";
 import { theme } from "@/theme";
 
-const featuredDomains = ["personal_growth", "peace", "creativity"] as const;
-
 export default function FutureSelfScreen() {
-  const hasProfile = false;
+  const { user } = useAuth();
+  const [profile, setProfile] = useState<FutureSelfResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user?.token) return;
+    fetchFutureSelf(user.token)
+      .then(setProfile)
+      .catch(() => setProfile(null))
+      .finally(() => setLoading(false));
+  }, [user?.token]);
+
+  if (loading) return <LoadingScreen />;
 
   return (
     <Screen>
-      <PageHeader
-        title="Gelecekteki Ben"
-        subtitle="Hayalindeki halini tanımla — kendi kelimelerinle, kendi hızında."
-      />
-
-      {hasProfile ? (
-        <Card title="Profilin">
-          <Text style={styles.placeholder}>Profil detayları burada görünecek.</Text>
-        </Card>
+      <PageHeader title="Gelecekteki Ben" subtitle="Onayladığın vizyon özeti." />
+      {profile ? (
+        <>
+          <Card title={profile.title}>
+            <Text style={styles.body}>{profile.description}</Text>
+          </Card>
+          <Card title="Yaşam alanları" style={styles.gap}>
+            <Text style={styles.chips}>
+              {profile.domains.map((d) => `${LIFE_DOMAINS[d].emoji} ${LIFE_DOMAINS[d].label.tr}`).join(" · ")}
+            </Text>
+          </Card>
+          {profile.affirmations.length ? (
+            <Card title="Olumlamalar">
+              {profile.affirmations.map((a) => (
+                <Text key={a} style={styles.affirmation}>
+                  “{a}”
+                </Text>
+              ))}
+            </Card>
+          ) : null}
+        </>
       ) : (
         <Card>
-          <EmptyState
-            emoji="✦"
-            title="Gelecekteki halini henüz tanımlamadın"
-            description="Vizyonunu, önem verdiğin alanları ve kendine söylediğin olumlamaları burada oluşturacaksın."
-          />
-          <Button label="Profil oluştur" onPress={() => {}} />
+          <EmptyState emoji="✦" title="Profil bulunamadı" description="Onboarding'i tamamlaman gerekebilir." />
         </Card>
       )}
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Yaşam alanları</Text>
-        <Text style={styles.sectionHint}>
-          Sana en yakın hissettiren alanları seç. Hepsini doldurmak zorunda değilsin.
-        </Text>
-        <View style={styles.chips}>
-          {featuredDomains.map((domain) => (
-            <View key={domain} style={styles.chip}>
-              <Text style={styles.chipText}>
-                {LIFE_DOMAINS[domain].emoji} {LIFE_DOMAINS[domain].label.tr}
-              </Text>
-            </View>
-          ))}
-        </View>
-      </View>
-
-      <Card title="Olumlamalar" subtitle="Gelecekteki senin sesi — kısa ve samimi.">
-        <EmptyState
-          emoji="💬"
-          title="Henüz olumlama yok"
-          description="Kendine söylemek istediğin birkaç cümle ekleyebilirsin."
-        />
-      </Card>
-
-      <Card title="Vizyon panosu" subtitle="Görsel referanslar — ileride eklenecek.">
-        <EmptyState
-          emoji="🖼️"
-          title="Henüz görsel yok"
-          description="İlham veren görselleri burada toplayacaksın."
-        />
-      </Card>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  section: {
-    marginVertical: theme.space.xl,
-  },
-  sectionTitle: {
-    fontSize: theme.font.size.md,
-    fontWeight: theme.font.weight.semibold,
-    color: theme.color.text.primary,
-    marginBottom: theme.space.xs,
-  },
-  sectionHint: {
-    fontSize: theme.font.size.sm,
-    color: theme.color.text.secondary,
-    lineHeight: 20,
-    marginBottom: theme.space.lg,
-  },
-  chips: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: theme.space.sm,
-  },
-  chip: {
-    backgroundColor: theme.color.surface.raised,
-    borderWidth: 1,
-    borderColor: theme.color.line.soft,
-    borderRadius: theme.radius.pill,
-    paddingHorizontal: theme.space.lg,
-    paddingVertical: theme.space.sm,
-  },
-  chipText: {
-    fontSize: theme.font.size.sm,
-    color: theme.color.text.primary,
-  },
-  placeholder: {
-    color: theme.color.text.secondary,
-  },
+  body: { fontSize: theme.font.size.md, lineHeight: 22, color: theme.color.text.secondary },
+  gap: { marginTop: theme.space.lg },
+  chips: { fontSize: theme.font.size.sm, color: theme.color.text.primary, lineHeight: 22 },
+  affirmation: { fontStyle: "italic", color: theme.color.text.primary, marginBottom: theme.space.sm },
 });
