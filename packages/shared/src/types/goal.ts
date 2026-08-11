@@ -2,15 +2,15 @@ import type { DateString, DateTimeString, ID } from "./user";
 
 export type GoalStatus = "draft" | "active" | "completed" | "paused" | "archived";
 
-/** 90-day transformation goal linked to a Future Self profile */
+/** User-defined goal — no fixed duration; pace is personal */
 export interface Goal {
   id: ID;
   userId: ID;
-  futureSelfId: ID;
+  futureSelfId?: ID;
   title: string;
   description: string;
-  targetDate: DateString;
-  durationDays: 90;
+  /** Optional milestone the user sets for themselves */
+  targetDate?: DateString;
   status: GoalStatus;
   createdAt: DateTimeString;
   updatedAt: DateTimeString;
@@ -18,14 +18,13 @@ export interface Goal {
 
 export type PlanStatus = "draft" | "active" | "completed" | "superseded";
 
-/** Active 30-day plan derived from a Goal; version increments on weekly adaptation */
+/** Personal plan or process step collection — flexible length, user-driven */
 export interface Plan {
   id: ID;
   userId: ID;
-  goalId: ID;
+  goalId?: ID;
   title: string;
-  startDate: DateString;
-  endDate: DateString;
+  description?: string;
   status: PlanStatus;
   version: number;
   createdAt: DateTimeString;
