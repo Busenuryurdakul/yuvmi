@@ -11,8 +11,8 @@ type AlignmentRingProps = {
 export function AlignmentRing({ alignment, compact }: AlignmentRingProps) {
   const content = (
     <View style={[styles.ring, compact && styles.ringCompact]}>
-      <Text style={styles.score}>{alignment.overallScore}</Text>
-      <Text style={styles.label}>Hizalanma</Text>
+      <Text style={[styles.score, compact && styles.scoreCompact]}>{alignment.overallScore}</Text>
+      {compact ? null : <Text style={styles.label}>Hiza</Text>}
     </View>
   );
 
@@ -36,25 +36,28 @@ const styles = StyleSheet.create({
     width: 140,
     height: 140,
     borderRadius: 70,
-    borderWidth: 8,
-    borderColor: theme.color.brand.teal,
+    borderWidth: 2,
+    borderColor: theme.color.blue,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: theme.color.surface.sunken,
+    backgroundColor: "transparent",
     marginVertical: theme.space.lg,
   },
-  ringCompact: { width: 96, height: 96, borderRadius: 48, borderWidth: 6, marginVertical: 0 },
+  ringCompact: { width: 72, height: 72, borderRadius: 36, borderWidth: 1.5, marginVertical: 0 },
   score: {
     fontSize: 36,
     fontWeight: theme.font.weight.semibold,
-    color: theme.color.brand.tealText,
+    color: theme.color.ink,
   },
-  label: { fontSize: theme.font.size.xs, color: theme.color.text.secondary },
+  scoreCompact: {
+    fontSize: 22,
+  },
+  label: { fontSize: theme.font.size.xs, color: theme.color.inkMuted, letterSpacing: 1 },
   compactWrap: { flexDirection: "row", alignItems: "center", gap: theme.space.lg },
   summary: {
     flex: 1,
     fontSize: theme.font.size.sm,
-    color: theme.color.text.secondary,
+    color: theme.color.inkMuted,
     lineHeight: 20,
   },
 });

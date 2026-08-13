@@ -98,7 +98,7 @@ export default function NotificationsScreen() {
 
 const styles = StyleSheet.create({
   gap: { marginTop: theme.space.lg },
-  unread: { borderColor: theme.color.brand.roseText, borderWidth: 1 },
+  unread: { borderColor: theme.color.accent, borderWidth: StyleSheet.hairlineWidth },
   row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   title: {
     fontSize: theme.font.size.md,
@@ -116,7 +116,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: theme.color.brand.roseText,
+    backgroundColor: theme.color.accent,
     marginLeft: theme.space.sm,
   },
 });

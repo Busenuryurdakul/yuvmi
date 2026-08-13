@@ -38,7 +38,7 @@ const styles = StyleSheet.create({
   },
   fill: {
     height: "100%",
-    backgroundColor: theme.color.brand.rose,
+    backgroundColor: theme.color.blue,
   },
   meta: {
     marginTop: theme.space.xs,

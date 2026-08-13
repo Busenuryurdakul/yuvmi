@@ -1,26 +1,31 @@
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import { router } from "expo-router";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { router, type Href } from "expo-router";
 import { Screen } from "@/components/ui/Screen";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
-import { AlignmentRing } from "@/components/alignment/AlignmentRing";
+import { Eyebrow, Glass } from "@/components/ui/Glass";
+import { TapRow } from "@/components/ui/TapRow";
 import { useAuth } from "@/context/AuthContext";
-import { useSubscription } from "@/hooks/useSubscription";
-import { PremiumGate } from "@/components/premium/PremiumGate";
 import { fetchActiveGoal, fetchActivePlan, fetchPlans, fetchTodayAlignment } from "@/lib/api/yuvmi";
 import type { AlignmentResponse, GoalResponse, PlanResponse } from "@/lib/api/types";
+import { shortStamp } from "@/lib/formatDate";
 import { theme } from "@/theme";
+
+function healthCopy(alignment: AlignmentResponse | null) {
+  if (!alignment) {
+    return { title: "Ritim kuruluyor", body: "Günlük adımlar birikince planın nabzı burada görünecek." };
+  }
+  if (alignment.overallScore >= 75) return { title: "Ritim yerinde", body: alignment.summaryExplanation };
+  if (alignment.overallScore >= 45) return { title: "Biraz yoğun", body: alignment.summaryExplanation };
+  return { title: "Hafifletilebilir", body: alignment.summaryExplanation };
+}
 
 export default function JourneyScreen() {
   const { user } = useAuth();
-  const { subscription, isPremium } = useSubscription();
   const [goal, setGoal] = useState<GoalResponse | null>(null);
   const [plan, setPlan] = useState<PlanResponse | null>(null);
-  const [plans, setPlans] = useState<PlanResponse[]>([]);
   const [alignment, setAlignment] = useState<AlignmentResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -31,10 +36,9 @@ export default function JourneyScreen() {
       fetchActivePlan(user.token),
       fetchPlans(user.token),
       fetchTodayAlignment(user.token),
-    ]).then(([g, p, pl, a]) => {
+    ]).then(([g, p, , a]) => {
       setGoal(g.status === "fulfilled" ? g.value : null);
       setPlan(p.status === "fulfilled" ? p.value : null);
-      setPlans(pl.status === "fulfilled" ? pl.value : []);
       setAlignment(a.status === "fulfilled" ? a.value : null);
       setLoading(false);
     });
@@ -42,70 +46,93 @@ export default function JourneyScreen() {
 
   if (loading) return <LoadingScreen />;
 
-  const supersededCount = plans.filter((p) => p.status === "superseded").length;
-  const atGoalLimit = !isPremium && (subscription?.usage.goals ?? (goal ? 1 : 0)) >= (subscription?.limits.maxGoals ?? 1);
+  const steps = plan?.steps ?? [];
+  const health = healthCopy(alignment);
 
   return (
-    <Screen>
-      <PageHeader title="Yolculuk" subtitle="Hedef, plan ve hizalanma." />
+    <Screen tabBar>
+      <PageHeader
+        eyebrow={goal?.title ?? "Yolculuk"}
+        eyebrowRight={plan ? `Plan v${plan.version}` : "Plan yok"}
+        title="Yolculuk"
+        subtitle="Vizyonun günlük hâli. Her adım bir ana bağlı."
+      />
 
-      {goal ? (
-        <Card title="Aktif hedef">
-          <Text style={styles.title}>{goal.title}</Text>
-          <Text style={styles.body}>{goal.description}</Text>
-        </Card>
-      ) : (
-        <Card>
-          <EmptyState
-            emoji="🧭"
-            title="Aktif hedef yok"
-            description="Onboarding'de bir hedef oluştur veya yeni hedef ekle."
-          />
-        </Card>
-      )}
-
-      {plan ? (
-        <Card title={`Plan v${plan.version}`} style={styles.gap}>
-          <Text style={styles.body}>{plan.description ?? plan.title}</Text>
-          <Text style={styles.meta}>{plan.steps.length} adım tanımlı</Text>
-          {supersededCount > 0 ? (
-            <Text style={styles.meta}>{supersededCount} önceki plan sürümü</Text>
-          ) : null}
-        </Card>
+      {!goal ? (
+        <EmptyState title="Aktif hedef yok" description="Onboarding'de bir hedef oluştur veya yeni hedef ekle." />
       ) : null}
 
-      {goal && atGoalLimit ? (
-        <PremiumGate
-          feature="İkinci hedef"
-          description="Ücretsiz planda bir aktif hedefin olabilir. Birden fazla hedefle yolculuğunu derinleştirmek için Premium'a geç."
-          style={styles.gap}
-        >
-          <Button label="Yeni hedef ekle" variant="secondary" disabled onPress={() => {}} />
-        </PremiumGate>
-      ) : null}
+      {steps.map((step, index) => (
+        <TapRow
+          key={step.id}
+          title={`${String(index + 1).padStart(2, "0")} · ${step.title}`}
+          subtitle={step.description || undefined}
+          arrow="›"
+          onPress={() =>
+            router.push(`/intention/new?stepId=${step.id}` as Href)
+          }
+        />
+      ))}
 
-      <Card title="Haftalık döngü" style={styles.gap}>
-        <Text style={styles.body}>7 günlük veriden haftalık özet ve plan v2 önerisi.</Text>
-        <Button label="Haftalık değerlendirme" onPress={() => router.push("/weekly-review")} />
-      </Card>
+      <Pressable onPress={() => router.push("/intention/new" as Href)} style={styles.add}>
+        <Text style={styles.addText}>+ Niyet ekle</Text>
+      </Pressable>
 
-      <Card title="Hizalanma" style={styles.gap}>
-        {alignment ? (
-          <>
-            <AlignmentRing alignment={alignment} compact />
-            <Button label="Faktör detayı" variant="secondary" onPress={() => router.push("/alignment")} />
-          </>
-        ) : (
-          <EmptyState emoji="📈" title="Henüz hesaplanmadı" description="Check-in ve görevlerle oluşur." />
-        )}
-      </Card>
+      <Glass style={styles.health}>
+        <Eyebrow>Plan sağlığı</Eyebrow>
+        <Text style={styles.healthBig}>{health.title}</Text>
+        <Text style={styles.healthBody}>{health.body}</Text>
+      </Glass>
+
+      <View style={{ height: 16 }} />
+      <TapRow
+        title="Haftalık değerlendirme"
+        subtitle="Bu haftanın ritmi, örüntüler ve plan önerisi"
+        onPress={() => router.push("/weekly-review")}
+      />
+      <TapRow
+        title="Plan geçmişi"
+        subtitle={plan ? `v${plan.version} · ${shortStamp(plan.createdAt)}'te kuruldu` : "Henüz plan yok"}
+        onPress={() => router.push("/plan-history" as Href)}
+      />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: theme.font.size.lg, fontWeight: theme.font.weight.semibold, color: theme.color.text.primary },
-  body: { fontSize: theme.font.size.sm, lineHeight: 22, color: theme.color.text.secondary, marginTop: theme.space.sm },
-  meta: { marginTop: theme.space.sm, fontSize: theme.font.size.xs, color: theme.color.text.tertiary },
-  gap: { marginTop: theme.space.lg },
+  add: {
+    marginTop: 4,
+    backgroundColor: "rgba(255,255,255,0.4)",
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: theme.color.blueLight,
+    borderRadius: 14,
+    padding: 13,
+    alignItems: "center",
+  },
+  addText: {
+    fontFamily: theme.font.sansSemibold,
+    fontSize: 13.5,
+    fontWeight: theme.font.weight.semibold,
+    color: theme.color.blueDeep,
+  },
+  health: {
+    padding: 16,
+    marginTop: 16,
+  },
+  healthBig: {
+    fontFamily: theme.font.sansExtra,
+    fontSize: 19,
+    fontWeight: theme.font.weight.extra,
+    letterSpacing: -0.3,
+    color: theme.color.ink,
+    marginTop: 5,
+    marginBottom: 4,
+  },
+  healthBody: {
+    fontFamily: theme.font.sans,
+    fontSize: 13,
+    color: theme.color.ink70,
+    lineHeight: 20,
+  },
 });

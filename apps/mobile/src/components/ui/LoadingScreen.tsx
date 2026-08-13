@@ -1,10 +1,17 @@
 import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { AmbientBackground } from "@/components/ui/Glass";
 import { theme } from "@/theme";
 
-export function LoadingScreen() {
+type LoadingScreenProps = {
+  tone?: "paper" | "ink";
+};
+
+export function LoadingScreen({ tone = "paper" }: LoadingScreenProps) {
+  const ink = tone === "ink";
   return (
-    <View style={styles.loading}>
-      <ActivityIndicator size="large" color={theme.color.brand.rose} />
+    <View style={[styles.loading, ink && styles.ink]}>
+      {ink ? null : <AmbientBackground />}
+      <ActivityIndicator size="large" color={ink ? theme.color.onInk : theme.color.blue} />
     </View>
   );
 }
@@ -14,6 +21,9 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: theme.color.surface.base,
+    backgroundColor: theme.color.mist,
+  },
+  ink: {
+    backgroundColor: theme.color.ink,
   },
 });

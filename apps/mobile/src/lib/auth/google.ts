@@ -9,9 +9,14 @@ type GoogleSignInResult =
   | { ok: true; user: OAuthProfile; idToken: string }
   | { ok: false; reason: "cancelled" | "unconfigured" | "failed"; message?: string };
 
+/** Hook requires a non-empty webClientId on web; real auth still gated by isGoogleConfigured(). */
+const UNCONFIGURED_WEB_CLIENT_ID =
+  "000000000000-yuvmi-unconfigured.apps.googleusercontent.com";
+
 export function useGoogleAuthRequest() {
   const [request, response, promptAsync] = Google.useAuthRequest({
-    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+    webClientId:
+      process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || UNCONFIGURED_WEB_CLIENT_ID,
     iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
     androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
   });

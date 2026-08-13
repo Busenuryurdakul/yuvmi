@@ -38,7 +38,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.color.surface.raised,
   },
   cardActive: {
-    borderColor: theme.color.brand.rose,
+    borderColor: theme.color.ink,
     backgroundColor: theme.color.surface.sunken,
   },
   title: {

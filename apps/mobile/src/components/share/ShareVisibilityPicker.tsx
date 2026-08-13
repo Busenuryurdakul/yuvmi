@@ -51,8 +51,8 @@ const styles = StyleSheet.create({
     backgroundColor: theme.color.surface.raised,
   },
   optionSelected: {
-    borderColor: theme.color.brand.rose,
-    backgroundColor: "rgba(196, 113, 123, 0.06)",
+    borderColor: theme.color.ink,
+    backgroundColor: theme.color.surface.sunken,
   },
   disabled: { opacity: 0.5 },
   radio: {
@@ -64,8 +64,8 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   radioSelected: {
-    borderColor: theme.color.brand.rose,
-    backgroundColor: theme.color.brand.rose,
+    borderColor: theme.color.ink,
+    backgroundColor: theme.color.ink,
   },
   texts: { flex: 1 },
   label: {
@@ -73,7 +73,7 @@ const styles = StyleSheet.create({
     fontWeight: theme.font.weight.medium,
     color: theme.color.text.primary,
   },
-  labelSelected: { color: theme.color.brand.roseText },
+  labelSelected: { color: theme.color.ink },
   hint: {
     marginTop: theme.space.xs,
     fontSize: theme.font.size.xs,

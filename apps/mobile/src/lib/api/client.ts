@@ -1,6 +1,5 @@
 import { getApiBaseUrl } from "./config";
 import { refreshAuthToken } from "./yuvmi";
-import type { ApiErrorBody } from "./types";
 
 export class ApiError extends Error {
   code: number;
@@ -18,6 +17,27 @@ type RequestOptions = {
   body?: unknown;
   onTokenRefreshed?: (tokens: { token: string; refreshToken: string }) => void;
 };
+
+function parseApiError(payload: Record<string, unknown>, status: number): ApiError {
+  const nested = payload.error;
+  if (nested && typeof nested === "object" && "message" in nested) {
+    const err = nested as { message?: string; code?: number };
+    return new ApiError(
+      err.message ?? `İstek başarısız (${status})`,
+      err.code ?? status,
+    );
+  }
+
+  if (typeof nested === "string" && nested.length > 0) {
+    return new ApiError(nested, status);
+  }
+
+  if (typeof payload.message === "string" && payload.message.length > 0) {
+    return new ApiError(payload.message, (payload.code as number | undefined) ?? status);
+  }
+
+  return new ApiError(`İstek başarısız (${status})`, status);
+}
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   return requestWithRefresh(path, options, false);
@@ -44,6 +64,11 @@ async function requestWithRefresh<T>(
     method: options.method ?? (options.body !== undefined ? "POST" : "GET"),
     headers,
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+  }).catch(() => {
+    throw new ApiError(
+      `API'ye ulaşılamadı (${getApiBaseUrl()}). Backend çalışıyor mu?`,
+      0,
+    );
   });
 
   const text = await response.text();
@@ -71,10 +96,7 @@ async function requestWithRefresh<T>(
   }
 
   if (!response.ok) {
-    const err = payload as ApiErrorBody;
-    const message =
-      err.error?.message ?? err.message ?? `İstek başarısız (${response.status})`;
-    throw new ApiError(message, err.error?.code ?? response.status);
+    throw parseApiError(payload, response.status);
   }
 
   if ("data" in payload) {
@@ -110,10 +132,7 @@ export async function apiUpload<T>(
   const payload = text ? (JSON.parse(text) as Record<string, unknown>) : {};
 
   if (!response.ok) {
-    const err = payload as ApiErrorBody;
-    const message =
-      err.error?.message ?? err.message ?? `İstek başarısız (${response.status})`;
-    throw new ApiError(message, err.error?.code ?? response.status);
+    throw parseApiError(payload, response.status);
   }
 
   if ("data" in payload) {

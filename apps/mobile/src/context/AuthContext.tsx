@@ -171,12 +171,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }) => {
       try {
         if (input.mode === "register") {
-          await registerUser({
-            email: input.email,
-            password: input.password,
-            firstName: input.firstName ?? "Yuvmi",
-            lastName: input.lastName ?? "Kullanıcı",
-          });
+          try {
+            await registerUser({
+              email: input.email,
+              password: input.password,
+              firstName: input.firstName ?? "Yuvmi",
+              lastName: input.lastName ?? "Kullanıcı",
+            });
+          } catch (error) {
+            if (!(error instanceof ApiError && error.code === 409)) {
+              throw error;
+            }
+          }
         }
         const login = await loginUser(input.email, input.password);
         const profile = await fetchMe(login.token);

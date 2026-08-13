@@ -1,14 +1,23 @@
 import { StyleSheet, Text, View } from "react-native";
 import { APP_NAME } from "@yuvmi/shared";
+import { Eyebrow } from "@/components/ui/Glass";
 import { theme } from "@/theme";
 
 type PageHeaderProps = {
   title: string;
   subtitle?: string;
+  eyebrow?: string;
+  eyebrowRight?: string;
   showBrand?: boolean;
 };
 
-export function PageHeader({ title, subtitle, showBrand = false }: PageHeaderProps) {
+export function PageHeader({
+  title,
+  subtitle,
+  eyebrow,
+  eyebrowRight,
+  showBrand = false,
+}: PageHeaderProps) {
   return (
     <View style={styles.container}>
       {showBrand ? (
@@ -19,6 +28,12 @@ export function PageHeader({ title, subtitle, showBrand = false }: PageHeaderPro
           <Text style={styles.brand}>{APP_NAME}</Text>
         </View>
       ) : null}
+      {eyebrow || eyebrowRight ? (
+        <View style={styles.toprow}>
+          <Eyebrow>{eyebrow ?? " "}</Eyebrow>
+          {eyebrowRight ? <Eyebrow>{eyebrowRight}</Eyebrow> : null}
+        </View>
+      ) : null}
       <Text style={styles.title}>{title}</Text>
       {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
     </View>
@@ -27,7 +42,7 @@ export function PageHeader({ title, subtitle, showBrand = false }: PageHeaderPro
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: theme.space.xl,
+    marginBottom: 8,
   },
   brandRow: {
     flexDirection: "row",
@@ -39,30 +54,42 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: theme.color.brand.rose,
+    backgroundColor: theme.color.blue,
     alignItems: "center",
     justifyContent: "center",
   },
   logoText: {
     color: "#fff",
     fontSize: 18,
-    fontWeight: theme.font.weight.semibold,
+    fontFamily: theme.font.sansBold,
+    fontWeight: theme.font.weight.bold,
   },
   brand: {
     fontSize: theme.font.size.xl,
-    fontWeight: theme.font.weight.semibold,
-    color: theme.color.text.primary,
+    fontFamily: theme.font.sansBold,
+    fontWeight: theme.font.weight.bold,
+    color: theme.color.ink,
+  },
+  toprow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "baseline",
+    marginBottom: 14,
   },
   title: {
-    fontSize: theme.font.size.xxl,
-    fontWeight: theme.font.weight.semibold,
-    color: theme.color.text.primary,
+    fontFamily: theme.font.sansExtra,
+    fontSize: 30,
+    fontWeight: theme.font.weight.extra,
+    color: theme.color.ink,
+    letterSpacing: -0.8,
     lineHeight: 34,
   },
   subtitle: {
-    marginTop: theme.space.sm,
-    fontSize: theme.font.size.md,
-    lineHeight: 24,
-    color: theme.color.text.secondary,
+    marginTop: 4,
+    marginBottom: 18,
+    fontFamily: theme.font.sans,
+    fontSize: 14,
+    lineHeight: 22,
+    color: theme.color.ink70,
   },
 });
