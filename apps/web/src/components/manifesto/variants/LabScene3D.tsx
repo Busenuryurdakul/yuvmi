@@ -32,6 +32,7 @@ export function LabScene3D({ onReady }: LabScene3DProps) {
   useEffect(() => {
     if (useFallback) return;
 
+    const container = containerRef.current;
     let alive = true;
     let animationId = 0;
     let renderer: import("three").WebGLRenderer | null = null;
@@ -39,7 +40,6 @@ export function LabScene3D({ onReady }: LabScene3DProps) {
     const disposables: Array<{ dispose?: () => void }> = [];
 
     const init = async () => {
-      const container = containerRef.current;
       if (!container || !alive) return;
 
       try {
@@ -333,7 +333,7 @@ export function LabScene3D({ onReady }: LabScene3DProps) {
       cancelAnimationFrame(animationId);
       removeListeners?.();
       for (const item of disposables) item.dispose?.();
-      containerRef.current?.replaceChildren();
+      container?.replaceChildren();
     };
   }, [useFallback]);
 
