@@ -27,6 +27,21 @@ export type OfflineQueueItem =
       createdAt: string;
     };
 
+type OfflineQueueInput = Omit<OfflineQueueItem, "id" | "createdAt">;
+type TaskQueueItem = Extract<
+  OfflineQueueItem,
+  { type: "task_complete" } | { type: "task_skip" }
+>;
+type TaskQueueInput = Omit<TaskQueueItem, "id" | "createdAt">;
+
+function isTaskQueueInput(item: OfflineQueueInput): item is TaskQueueInput {
+  return item.type === "task_complete" || item.type === "task_skip";
+}
+
+function isTaskQueueItem(item: OfflineQueueItem): item is TaskQueueItem {
+  return item.type === "task_complete" || item.type === "task_skip";
+}
+
 async function loadQueue(): Promise<OfflineQueueItem[]> {
   const raw = await AsyncStorage.getItem(QUEUE_KEY);
   if (!raw) return [];
@@ -52,7 +67,7 @@ function dedupeQueue(items: OfflineQueueItem[]): OfflineQueueItem[] {
   for (const item of sorted) {
     if (item.type === "checkin") {
       checkin = item;
-    } else if (item.type === "task_complete" || item.type === "task_skip") {
+    } else if (isTaskQueueItem(item)) {
       taskActions.set(item.payload.taskId, item);
     }
   }
@@ -67,6 +82,15 @@ function isStaleError(error: unknown): boolean {
   return error instanceof ApiError && (error.code === 404 || error.code === 409);
 }
 
+function filterOutTaskAction(items: OfflineQueueItem[], taskId: string): OfflineQueueItem[] {
+  return items.filter((i) => {
+    if (isTaskQueueItem(i)) {
+      return i.payload.taskId !== taskId;
+    }
+    return true;
+  });
+}
+
 export function useOfflineQueue(token: string | null | undefined) {
   const [pendingCount, setPendingCount] = useState(0);
   const [flushing, setFlushing] = useState(false);
@@ -77,7 +101,7 @@ export function useOfflineQueue(token: string | null | undefined) {
   }, []);
 
   const enqueue = useCallback(
-    async (item: Omit<OfflineQueueItem, "id" | "createdAt">) => {
+    async (item: OfflineQueueInput) => {
       const items = dedupeQueue(await loadQueue());
       const next: OfflineQueueItem = {
         ...item,
@@ -88,14 +112,9 @@ export function useOfflineQueue(token: string | null | undefined) {
       if (item.type === "checkin") {
         const withoutCheckins = items.filter((i) => i.type !== "checkin");
         await saveQueue(dedupeQueue([...withoutCheckins, next]));
-      } else if ("taskId" in item.payload) {
+      } else if (isTaskQueueInput(item)) {
         const taskId = item.payload.taskId;
-        const withoutTask = items.filter(
-          (i) =>
-            (i.type !== "task_complete" && i.type !== "task_skip") ||
-            i.payload.taskId !== taskId,
-        );
-        await saveQueue(dedupeQueue([...withoutTask, next]));
+        await saveQueue(dedupeQueue([...filterOutTaskAction(items, taskId), next]));
       }
       await refreshCount();
     },
@@ -146,7 +165,7 @@ export function useOfflineQueue(token: string | null | undefined) {
   return { pendingCount, flushing, enqueue, flush, refreshCount };
 }
 
-export async function enqueueOfflineItem(item: Omit<OfflineQueueItem, "id" | "createdAt">) {
+export async function enqueueOfflineItem(item: OfflineQueueInput) {
   const items = dedupeQueue(await loadQueue());
   const next = {
     ...item,
@@ -156,17 +175,8 @@ export async function enqueueOfflineItem(item: Omit<OfflineQueueItem, "id" | "cr
 
   if (item.type === "checkin") {
     await saveQueue(dedupeQueue([...items.filter((i) => i.type !== "checkin"), next]));
-  } else if ("taskId" in item.payload) {
+  } else if (isTaskQueueInput(item)) {
     const taskId = item.payload.taskId;
-    await saveQueue(
-      dedupeQueue([
-        ...items.filter(
-          (i) =>
-            (i.type !== "task_complete" && i.type !== "task_skip") ||
-            i.payload.taskId !== taskId,
-        ),
-        next,
-      ]),
-    );
+    await saveQueue(dedupeQueue([...filterOutTaskAction(items, taskId), next]));
   }
 }
