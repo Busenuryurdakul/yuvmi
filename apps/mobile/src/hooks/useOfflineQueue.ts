@@ -88,7 +88,7 @@ export function useOfflineQueue(token: string | null | undefined) {
       if (item.type === "checkin") {
         const withoutCheckins = items.filter((i) => i.type !== "checkin");
         await saveQueue(dedupeQueue([...withoutCheckins, next]));
-      } else {
+      } else if ("taskId" in item.payload) {
         const taskId = item.payload.taskId;
         const withoutTask = items.filter(
           (i) =>
@@ -156,7 +156,7 @@ export async function enqueueOfflineItem(item: Omit<OfflineQueueItem, "id" | "cr
 
   if (item.type === "checkin") {
     await saveQueue(dedupeQueue([...items.filter((i) => i.type !== "checkin"), next]));
-  } else {
+  } else if ("taskId" in item.payload) {
     const taskId = item.payload.taskId;
     await saveQueue(
       dedupeQueue([
