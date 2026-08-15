@@ -1,8 +1,8 @@
 # Yuvmi — İnşa Planı
 
 > **Durum:** Aktif yol haritası  
-> **Son güncelleme:** 2026-08-11  
-> **Referanslar:** [`PRD.md`](./PRD.md) · [`PRD-AI.md`](./PRD-AI.md) · [`ARCHITECTURE.md`](./ARCHITECTURE.md)
+> **Son güncelleme:** 2026-08-13  
+> **Referanslar:** [`PRD.md`](./PRD.md) · [`IA.md`](./IA.md) · [`PRD-AI.md`](./PRD-AI.md) · [`ARCHITECTURE.md`](./ARCHITECTURE.md)
 
 ---
 
@@ -74,6 +74,8 @@ apps/mobile/
 ---
 
 ## 02 — Faz Mimarisi
+
+**Faz numaraları (0–5) değişmez.** Ekran ve kavram sırası için güncel kaynak [`IA.md`](./IA.md) (Katman A/B/C). Faz 0 iskelet olarak tamamlandı; “çekirdek deneyim” yeni bir Faz 0 değildir.
 
 ```text
 Faz 0 ──► Faz 1 ──► Faz 2 ──► Faz 3 ──► Faz 4 ──► Faz 5
@@ -156,7 +158,7 @@ apps/api/          ← YENİ (Go)
 | `(onboarding)/future-self` | Profil formu | Stepper, domain chip, affirmations |
 | `(onboarding)/future-self-review` | Onay | Düzenle / Onayla |
 | `(onboarding)/goal` | Hedef | title, description, opsiyonel targetDate |
-| `(onboarding)/plan` | Plan | Şablon picker + düzenleme |
+| `(onboarding)/plan` | Plan | Kullanıcı adımları yazar (şablon-first değil; [`IA.md`](./IA.md), [`UX-NOTLAR-ONBOARDING.md`](./UX-NOTLAR-ONBOARDING.md)) |
 | `(onboarding)/complete` | Tamamlandı | Dashboard'a yönlendir |
 
 **Guard:** `AuthContext` + `onboardingComplete` flag → tamamlanmamışsa onboarding'e yönlendir.
@@ -370,7 +372,7 @@ feat/api-alignment
 | Backend gecikmesi | Mobil mock'ta kalır | MSW / local JSON fixture ile paralel UI |
 | OAuth prod yapılandırması | Apple/Google giriş çalışmaz | Dev mock session (mevcut) + staging env |
 | Scope creep (AI erken) | MVP gecikir | AI kesinlikle Faz 5; PRD-AI ayrı |
-| Esnek Goal/Plan UX karmaşıklığı | Onboarding uzar | Plan şablonları ile hızlandır |
+| Esnek Goal/Plan UX karmaşıklığı | Onboarding uzar | Niyet planı alanları (ne / bağ / en küçük hâl); şablon yok. [`IA.md`](./IA.md) |
 
 ---
 
@@ -393,7 +395,8 @@ feat/api-alignment
 |-------|--------|
 | [`TEKNIK-BORC.md`](./TEKNIK-BORC.md) | Bilinçli ertelemeler, pre-prod borçlar |
 | [`PRODUCT.md`](./PRODUCT.md) | Ürün vizyonu, rakipler, premium |
-| [`PRD.md`](./PRD.md) | Tam UX/UI/veri mimarisi (AI hariç MVP) |
+| [`IA.md`](./IA.md) | Uygulama bilgi mimarisi (güncel) |
+| [`PRD.md`](./PRD.md) | Tam UX/UI/veri mimarisi (AI hariç MVP); §06–08 = IA v1 |
 | [`PRD-AI.md`](./PRD-AI.md) | AI fazı gereksinimleri |
 | [`INSA-PLANI.md`](./INSA-PLANI.md) | Bu dosya — fazlar ve görev sırası |
 | [`ARCHITECTURE.md`](./ARCHITECTURE.md) | Backend teknoloji yönü |

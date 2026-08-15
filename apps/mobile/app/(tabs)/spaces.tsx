@@ -1,28 +1,23 @@
 import { useCallback, useEffect, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, StyleSheet, Text } from "react-native";
 import { router } from "expo-router";
 import { SPACE_TYPES, type SpaceType } from "@yuvmi/shared";
 import { Screen } from "@/components/ui/Screen";
-import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
-import { EmptyState } from "@/components/ui/EmptyState";
+import { Eyebrow, Glass } from "@/components/ui/Glass";
+import { TapRow } from "@/components/ui/TapRow";
 import { useAuth } from "@/context/AuthContext";
-import { useSubscription } from "@/hooks/useSubscription";
-import { promptPremiumUpsell } from "@/hooks/usePremiumUpsell";
-import { PremiumGate } from "@/components/premium/PremiumGate";
 import {
   acceptSpaceInvite,
-  createSpace,
   declineSpaceInvite,
+  fetchMyAssets,
   fetchPendingSpaceInvites,
   fetchSpaces,
 } from "@/lib/api/yuvmi";
 import type { PendingSpaceInviteResponse, SpaceResponse } from "@/lib/api/types";
 import { theme } from "@/theme";
-
-const sharedTypes: SpaceType[] = ["couple", "friends", "family"];
 
 const statusLabel: Record<string, string> = {
   draft: "Taslak",
@@ -33,208 +28,135 @@ const statusLabel: Record<string, string> = {
 
 export default function SpacesScreen() {
   const { user } = useAuth();
-  const { subscription, isPremium } = useSubscription();
   const [spaces, setSpaces] = useState<SpaceResponse[]>([]);
   const [invites, setInvites] = useState<PendingSpaceInviteResponse[]>([]);
+  const [assetLabel, setAssetLabel] = useState("0 görsel · 0 belge");
   const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState<SpaceType | null>(null);
 
   const load = useCallback(async () => {
     if (!user?.token) return;
-    const [s, i] = await Promise.allSettled([
+    const [s, i, a] = await Promise.allSettled([
       fetchSpaces(user.token),
       fetchPendingSpaceInvites(user.token),
+      fetchMyAssets(user.token),
     ]);
     setSpaces(s.status === "fulfilled" ? s.value : []);
     setInvites(i.status === "fulfilled" ? i.value : []);
+    if (a.status === "fulfilled") {
+      const images = a.value.filter((x) => x.type === "image").length;
+      const docs = a.value.filter((x) => x.type === "document").length;
+      setAssetLabel(`${images} görsel · ${docs} belge`);
+    }
     setLoading(false);
   }, [user?.token]);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
-
-  const handleCreate = async (type: SpaceType) => {
-    if (!user?.token) return;
-    setCreating(type);
-    try {
-      const space = await createSpace(user.token, { type });
-      router.push(`/spaces/${space.id}`);
-    } catch (e) {
-      if (!promptPremiumUpsell(e, { feature: "Ek ortak alan oluşturma" })) {
-        Alert.alert("Hata", e instanceof Error ? e.message : "Alan oluşturulamadı.");
-      }
-    } finally {
-      setCreating(null);
-    }
-  };
-
-  const handleAccept = async (inviteId: string) => {
-    if (!user?.token) return;
-    try {
-      const space = await acceptSpaceInvite(user.token, inviteId);
-      await load();
-      router.push(`/spaces/${space.id}`);
-    } catch (e) {
-      Alert.alert("Hata", e instanceof Error ? e.message : "Davet kabul edilemedi.");
-    }
-  };
-
-  const handleDecline = async (inviteId: string) => {
-    if (!user?.token) return;
-    try {
-      await declineSpaceInvite(user.token, inviteId);
-      setInvites((prev) => prev.filter((i) => i.id !== inviteId));
-    } catch (e) {
-      Alert.alert("Hata", e instanceof Error ? e.message : "Davet reddedilemedi.");
-    }
-  };
 
   if (loading) return <LoadingScreen />;
 
-  const spacesByType = Object.fromEntries(spaces.map((s) => [s.type, s])) as Partial<
-    Record<SpaceType, SpaceResponse>
-  >;
-  const ownedSpaceCount = subscription?.usage.spaces ?? spaces.length;
-  const atSpaceLimit = !isPremium && ownedSpaceCount >= (subscription?.limits.maxSpaces ?? 1);
-
   return (
-    <Screen>
+    <Screen tabBar>
       <PageHeader
+        eyebrow="Paylaşım"
+        eyebrowRight={spaces.length === 1 ? "1 alan" : `${spaces.length} alan`}
         title="Alanlar"
-        subtitle="Kişisel yolculuğundan ortak alanlara — ne paylaşacağına sen karar ver."
+        subtitle="Neyi kiminle paylaşacağına sen karar verirsin."
       />
 
-      <Button label="Arşivim" variant="secondary" onPress={() => router.push("/archive")} />
+      {invites.map((inv) => (
+        <Glass key={inv.id} style={styles.stat}>
+          <Eyebrow style={styles.lbl}>Bekleyen davet</Eyebrow>
+          <Text style={styles.title}>{inv.spaceName}</Text>
+          <Text style={styles.body}>
+            {inv.inviterName} · {SPACE_TYPES[inv.spaceType as SpaceType]?.label.tr ?? inv.spaceType}
+          </Text>
+          <Button label="Kabul et" onPress={async () => {
+            if (!user?.token) return;
+            try {
+              const space = await acceptSpaceInvite(user.token, inv.id);
+              router.push(`/spaces/${space.id}`);
+            } catch (e) {
+              Alert.alert("Hata", e instanceof Error ? e.message : "Davet kabul edilemedi.");
+            }
+          }} />
+          <Button
+            label="Reddet"
+            variant="secondary"
+            style={{ marginTop: 8 }}
+            onPress={async () => {
+              if (!user?.token) return;
+              await declineSpaceInvite(user.token, inv.id);
+              setInvites((prev) => prev.filter((x) => x.id !== inv.id));
+            }}
+          />
+        </Glass>
+      ))}
 
-      {invites.length > 0 ? (
-        <Card title="Bekleyen davetler" style={styles.section}>
-          {invites.map((inv) => (
-            <View key={inv.id} style={styles.inviteRow}>
-              <View style={styles.inviteInfo}>
-                <Text style={styles.inviteTitle}>{inv.spaceName}</Text>
-                <Text style={styles.inviteMeta}>
-                  {inv.inviterName} · {SPACE_TYPES[inv.spaceType as SpaceType]?.label.tr ?? inv.spaceType}
-                </Text>
-              </View>
-              <View style={styles.inviteActions}>
-                <Button label="Kabul" onPress={() => handleAccept(inv.id)} />
-                <Button label="Reddet" variant="secondary" onPress={() => handleDecline(inv.id)} />
-              </View>
-            </View>
-          ))}
-        </Card>
-      ) : null}
+      <Glass style={styles.stat}>
+        <Eyebrow style={styles.lbl}>Kişisel</Eyebrow>
+        <Text style={styles.title}>Kendi alanın</Text>
+        <Text style={styles.body}>
+          Bugünün ve gelecekteki hâlinin yolculuğu. Varsayılan olarak yalnızca sana görünür.
+        </Text>
+        <TapRow title="Arşivim" subtitle={assetLabel} nested onPress={() => router.push("/archive")} />
+      </Glass>
 
-      <Card title={SPACE_TYPES.personal.label.tr} subtitle={SPACE_TYPES.personal.description.tr} style={styles.section}>
-        <View style={styles.activeBadge}>
-          <Text style={styles.activeBadgeText}>Varsayılan alanın</Text>
-        </View>
-      </Card>
-
-      {sharedTypes.map((type) => {
-        const existing = spacesByType[type];
-        return (
-          <Card
-            key={type}
-            title={SPACE_TYPES[type].label.tr}
-            subtitle={SPACE_TYPES[type].description.tr}
-            style={styles.section}
-          >
-            {existing ? (
-              <Pressable onPress={() => router.push(`/spaces/${existing.id}`)}>
-                <View style={styles.spaceRow}>
-                  <View>
-                    <Text style={styles.spaceName}>{existing.name}</Text>
-                    <Text style={styles.spaceMeta}>
-                      {statusLabel[existing.status] ?? existing.status} · {existing.members.length} üye
-                    </Text>
-                  </View>
-                  <Text style={styles.chevron}>→</Text>
-                </View>
-              </Pressable>
-            ) : atSpaceLimit ? (
-              <PremiumGate
-                feature="Ek ortak alan"
-                description="Ücretsiz planda bir ortak alan oluşturabilirsin. Çift, arkadaş ve aile alanlarını birlikte kullanmak için Premium'a geç."
-              >
-                <Button label="Alan oluştur" variant="secondary" disabled onPress={() => {}} />
-              </PremiumGate>
-            ) : (
-              <Button
-                label="Alan oluştur"
-                variant="secondary"
-                loading={creating === type}
-                onPress={() => handleCreate(type)}
-              />
-            )}
-          </Card>
-        );
-      })}
-
-      {spaces.length === 0 && invites.length === 0 ? (
-        <EmptyState
-          emoji="🤝"
-          title="Henüz ortak alan yok"
-          description="Çift, arkadaş veya aile alanı oluşturarak birlikte büyümeye başla."
-        />
-      ) : null}
+      <Glass style={styles.stat}>
+        <Eyebrow style={styles.lbl}>Ortak alan</Eyebrow>
+        <Text style={styles.title}>Birini davet et</Text>
+        <Text style={styles.body}>
+          Partner, arkadaş ya da aile — kim olduğunu sen seçersin. Alan karşılıklı onayla açılır.
+        </Text>
+        {spaces.map((space) => (
+          <TapRow
+            key={space.id}
+            title={space.name}
+            subtitle={`${statusLabel[space.status] ?? space.status} · ${space.members.length} üye`}
+            nested
+            onPress={() => router.push(`/spaces/${space.id}`)}
+          />
+        ))}
+        <Button label="Davet gönder" variant="secondary" onPress={() => router.push("/spaces/invite")} />
+      </Glass>
 
       <Text style={styles.note}>
-        Ortak alanlar karşılıklı onayla açılır. Kişisel günlük ve notların otomatik paylaşılmaz.
+        Kişisel günlüğün, notların ve ruh hâlin{"\n"}ortak alana otomatik yansımaz.
       </Text>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  section: { marginBottom: theme.space.lg },
-  activeBadge: {
-    alignSelf: "flex-start",
-    backgroundColor: "rgba(91, 138, 138, 0.12)",
-    borderRadius: theme.radius.pill,
-    paddingHorizontal: theme.space.lg,
-    paddingVertical: theme.space.sm,
+  stat: {
+    paddingVertical: 15,
+    paddingHorizontal: 16,
+    marginBottom: 9,
   },
-  activeBadgeText: {
-    fontSize: theme.font.size.sm,
-    fontWeight: theme.font.weight.medium,
-    color: theme.color.brand.tealText,
+  lbl: {
+    marginBottom: 8,
   },
-  spaceRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+  title: {
+    fontFamily: theme.font.sansBold,
+    fontSize: 16,
+    fontWeight: theme.font.weight.bold,
+    color: theme.color.ink,
+    marginBottom: 4,
   },
-  spaceName: {
-    fontSize: theme.font.size.md,
-    fontWeight: theme.font.weight.semibold,
-    color: theme.color.text.primary,
-  },
-  spaceMeta: {
-    marginTop: theme.space.xs,
-    fontSize: theme.font.size.xs,
-    color: theme.color.text.tertiary,
-  },
-  chevron: { fontSize: theme.font.size.lg, color: theme.color.brand.roseText },
-  inviteRow: { marginBottom: theme.space.lg },
-  inviteInfo: { marginBottom: theme.space.sm },
-  inviteTitle: {
-    fontSize: theme.font.size.md,
-    fontWeight: theme.font.weight.semibold,
-    color: theme.color.text.primary,
-  },
-  inviteMeta: {
-    marginTop: theme.space.xs,
-    fontSize: theme.font.size.xs,
-    color: theme.color.text.secondary,
-  },
-  inviteActions: { gap: theme.space.sm },
-  note: {
-    marginTop: theme.space.sm,
-    fontSize: theme.font.size.xs,
+  body: {
+    fontFamily: theme.font.sans,
+    fontSize: 12.5,
+    color: theme.color.ink70,
     lineHeight: 18,
-    color: theme.color.text.tertiary,
+    marginBottom: 12,
+  },
+  note: {
+    marginTop: 14,
+    fontFamily: theme.font.sans,
+    fontSize: 11.5,
+    lineHeight: 18,
+    color: theme.color.ink40,
     textAlign: "center",
   },
 });

@@ -24,28 +24,33 @@ Yuvmi, bireyin **bugünkü halini** ve **gelecekteki ideal halini** yan yana gö
 
 ## Ana Ürün Döngüsü
 
-1. **Gelecekteki Ben** profili
-2. **90 günlük hedef**
-3. **30 günlük aktif plan**
-4. **Günlük kişiselleştirilmiş görev**
-5. **Haftalık AI değerlendirmesi**
-6. **Sonuca göre planın güncellenmesi**
+Güncel bilgi mimarisi: [`IA.md`](./IA.md).
+
+1. **Gelecekteki Ben** (kim + neden + davranış)
+2. **Hedef** (süre kullanıcıya ait; 90 gün zorunlu değil)
+3. **Plan** (kullanıcı yazar; denenebilir, versiyonlanır)
+4. **Bugünün odağı** (tamamla / minimum / bırak)
+5. **Bugünü kaydet** + hizalanma (ruh hâli puanı düşürmez)
+6. **Haftalık bakış** → gerekirse plan güncellenir
+
+AI değerlendirmesi ayrı fazdır ([`PRD-AI.md`](./PRD-AI.md)); çekirdek döngü AI olmadan çalışır.
 
 ### İlk uçtan uca akış
 
-Kayıt → Onboarding → Gelecekteki Ben profili → Kullanıcı onayı/düzenlemesi → 30 günlük plan → Bugünün görevi → Görev tamamlama → Haftalık değerlendirme
+Kayıt → Onboarding (Gelecekteki Ben → Hedef → Plan) → Bugünün odağı → Tamamlama / minimum / bırakma → Haftalık bakış
 
 ## Çekirdek Kavramlar
 
 | Kavram | Açıklama |
 |--------|----------|
-| **Bugün** | Günlük check-in — ruh hâli, enerji, minnet, yansıma |
-| **Gelecekteki Ben** | Hayalindeki hal; alanlar, affirmasyonlar, vizyon |
-| **Hedef** | 90 günlük dönüşüm hedefi (Gelecekteki Ben'e bağlı) |
-| **30 günlük plan** | Hedefin uygulanabilir fazı; haftalık güncellenebilir |
-| **Günlük mikro görev** | Plana göre kişiselleştirilmiş tek odak adım |
-| **Haftalık değerlendirme** | AI destekli özet ve plan uyarlaması |
-| **İlerleme / hizalanma** | Skor + açıklama; baskı veya suçluluk üretmez |
+| **Bugün** | Günlük kontrol — ruh hâli, enerji, yansıma; tek odak |
+| **Gelecekteki Ben** | Kimlik evi: kim olacağım, neden, davranış karşılığı |
+| **Hedef** | Gelecekteki Ben'e bağlı niyet (süre kişisel) |
+| **Plan** | Hedefin uygulanabilir adımları; versiyon + deneme haftası |
+| **Günlük odak** | Plana göre tek adım; minimum geçerli başarıdır |
+| **Geri dönüş** | Boş/atlanan günden sonra yeniden harekete geçme (streak değil) |
+| **Haftalık değerlendirme** | Metrik özeti + plan uyarlaması (AI sonra) |
+| **Hizalanma** | Yaklaşma ve nedeni; ruh hâli puanı düşürmez |
 | **Kişisel alan** | Varsayılan özel alan |
 | **Çift alanı** | İki tarafın onayıyla ortak alan |
 | **Arkadaş alanı** | Seçili paylaşım ve destek |
@@ -143,6 +148,8 @@ Aşağıdaki maddeler mağaza sayfalarından alınmıştır; kesin rakamlar zama
 
 ## Çekirdek Özellikler (Yol Haritası)
 
+Ekran evleri ve inşa katmanları: [`IA.md`](./IA.md). Aşağıdaki faz listesi vizyon özetidir; bilgi mimarisi çelişirse `IA.md` geçerlidir.
+
 ### Faz 1 — Temel (MVP)
 - [ ] Kullanıcı kayıt / giriş
 - [ ] Gelecekteki Ben profili + kullanıcı onayı
@@ -175,6 +182,7 @@ yuvmi/
 │   └── shared/       → Tipler, sabitler, paylaşılan mantık
 └── docs/
     ├── PRODUCT.md    → Bu dosya
+    ├── IA.md         → Uygulama bilgi mimarisi (güncel)
     └── ARCHITECTURE.md → Backend ihtiyaçları ve Go kararı
 ```
 

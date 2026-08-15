@@ -21,7 +21,7 @@ export function DomainChipGrid({ selected, onToggle }: DomainChipGridProps) {
             style={[styles.chip, active && styles.chipActive]}
           >
             <Text style={[styles.chipText, active && styles.chipTextActive]}>
-              {LIFE_DOMAINS[domain].emoji} {LIFE_DOMAINS[domain].label.tr}
+              {LIFE_DOMAINS[domain].label.tr}
             </Text>
           </Pressable>
         );
@@ -31,19 +31,26 @@ export function DomainChipGrid({ selected, onToggle }: DomainChipGridProps) {
 }
 
 const styles = StyleSheet.create({
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: theme.space.sm },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
   chip: {
+    backgroundColor: "rgba(255,255,255,0.4)",
+    borderRadius: 999,
+    paddingHorizontal: 13,
+    paddingVertical: 7,
     borderWidth: 1,
-    borderColor: theme.color.line.soft,
-    backgroundColor: theme.color.surface.raised,
-    borderRadius: theme.radius.pill,
-    paddingHorizontal: theme.space.lg,
-    paddingVertical: theme.space.sm,
+    borderColor: "rgba(11,18,32,0.12)",
   },
   chipActive: {
-    borderColor: theme.color.brand.rose,
-    backgroundColor: theme.color.surface.sunken,
+    backgroundColor: "rgba(37,99,235,0.14)",
+    borderColor: "transparent",
   },
-  chipText: { fontSize: theme.font.size.sm, color: theme.color.text.primary },
-  chipTextActive: { color: theme.color.brand.roseText, fontWeight: theme.font.weight.medium },
+  chipText: {
+    fontFamily: theme.font.sansMedium,
+    fontSize: 12.5,
+    color: theme.color.ink70,
+  },
+  chipTextActive: {
+    color: theme.color.blueDeep,
+    fontWeight: theme.font.weight.medium,
+  },
 });

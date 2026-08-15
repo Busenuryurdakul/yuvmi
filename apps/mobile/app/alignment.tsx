@@ -53,7 +53,7 @@ const styles = StyleSheet.create({
     borderBottomColor: theme.color.line.soft,
   },
   factorLabel: { fontSize: theme.font.size.sm, fontWeight: theme.font.weight.semibold, color: theme.color.text.primary },
-  factorScore: { fontSize: theme.font.size.sm, color: theme.color.brand.tealText, marginVertical: theme.space.xs },
+  factorScore: { fontSize: theme.font.size.sm, color: theme.color.inkMuted, marginVertical: theme.space.xs },
   factorExplain: { fontSize: theme.font.size.sm, color: theme.color.text.secondary, lineHeight: 20 },
   note: { marginTop: theme.space.lg, fontSize: theme.font.size.sm, color: theme.color.text.tertiary, textAlign: "center" },
 });

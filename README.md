@@ -19,6 +19,7 @@ Backend (Go) henüz kurulmadı — bkz. [`docs/ARCHITECTURE.md`](./docs/ARCHITEC
 | Dosya | İçerik |
 |-------|--------|
 | [`docs/PRODUCT.md`](./docs/PRODUCT.md) | Ürün vizyonu, MVP, premium, rakipler |
+| [`docs/IA.md`](./docs/IA.md) | Uygulama bilgi mimarisi (güncel; PRD §06–08 v1 arşiv) |
 | [`docs/PRD.md`](./docs/PRD.md) | Tam UX/UI/veri mimarisi (AI hariç MVP) |
 | [`docs/PRD-AI.md`](./docs/PRD-AI.md) | AI fazı gereksinimleri (sonra) |
 | [`docs/INSA-PLANI.md`](./docs/INSA-PLANI.md) | Faz bazlı inşa planı ve mevcut durum |

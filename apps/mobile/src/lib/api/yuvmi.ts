@@ -193,6 +193,10 @@ export async function fetchTodayAlignment(token: string) {
   return apiRequest<AlignmentResponse>("/api/v1/alignment/today", { token });
 }
 
+export async function fetchAlignmentHistory(token: string) {
+  return apiRequest<AlignmentResponse[]>("/api/v1/alignment/history", { token });
+}
+
 export async function fetchActivePlan(token: string) {
   return apiRequest<PlanResponse>("/api/v1/plans/active", { token });
 }

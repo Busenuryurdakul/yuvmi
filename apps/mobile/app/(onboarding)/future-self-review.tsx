@@ -71,7 +71,7 @@ const styles = StyleSheet.create({
   tags: { flexDirection: "row", flexWrap: "wrap", gap: theme.space.sm, marginTop: theme.space.lg },
   tag: {
     fontSize: theme.font.size.xs,
-    color: theme.color.brand.roseText,
+    color: theme.color.inkMuted,
     backgroundColor: theme.color.surface.sunken,
     paddingHorizontal: theme.space.md,
     paddingVertical: theme.space.xs,

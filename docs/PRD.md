@@ -1,8 +1,9 @@
 # Yuvmi — Product Requirements Document (PRD)
 
 > **Durum:** Canlı tasarım dokümanı  
-> **Son güncelleme:** 2026-08-11  
-> **Not:** AI destekli özellikler bu sürümde **kapsam dışı** bırakıldı; ayrı faz olarak [`PRD-AI.md`](./PRD-AI.md) dosyasında tanımlıdır. İnşa sırası için [`INSA-PLANI.md`](./INSA-PLANI.md).
+> **Son güncelleme:** 2026-08-13  
+> **Not:** AI destekli özellikler bu sürümde **kapsam dışı** bırakıldı; ayrı faz olarak [`PRD-AI.md`](./PRD-AI.md) dosyasında tanımlıdır. İnşa sırası için [`INSA-PLANI.md`](./INSA-PLANI.md).  
+> **Bilgi mimarisi:** Güncel kaynak [`IA.md`](./IA.md). Bu dosyadaki §06–08 **IA v1** olarak durur; çelişirse `IA.md` geçerlidir.
 
 ---
 
@@ -25,14 +26,16 @@ Olmak istediğin kişi ile bugünkü hâlin arasındaki yolu görünür kılar; 
 
 **Ana ürün döngüsü (AI olmadan MVP)**
 
+Güncel kesitler ve ekranlar: [`IA.md`](./IA.md).
+
 ```text
-Gelecekteki Ben (kullanıcı tanımlı)
-    → 90 günlük hedef
-    → 30 günlük plan (kullanıcı + şablon)
-    → Günlük görev + Bugün check-in
-    → Haftalık gözden geçirme (kullanıcı + sistem özeti)
+Gelecekteki Ben (kim + neden + davranış)
+    → Hedef (süre kişisel)
+    → Plan (kullanıcı yazar; denenebilir)
+    → Bugünün odağı + Bugünü kaydet
+    → Haftalık gözden geçirme
     → Plan güncelleme
-    → (Faz 2+) Seçili paylaşım ile ortak alanlar
+    → (Faz 3+) Seçili paylaşım ile ortak alanlar
 ```
 
 **Platform:** Web + Mobil (Expo) — ilk dil Türkçe, i18n hazır mimari.
@@ -232,6 +235,9 @@ Gelecekteki Ben (kullanıcı tanımlı)
 
 ### 06 — Information Architecture
 
+> **Superseded (IA v1).** Güncel omurga, beş ev, route ve model: [`IA.md`](./IA.md).  
+> Aşağıdaki ağaç 2026-08-13 öncesi yapıdır (Gelecekteki Ben Yolculuk altında; sekmeler Bugün / Yolculuk / Alanlar / Bildirimler / Hesap). Geri dönüş için silinmedi.
+
 ```text
 Yuvmi
 ├── Public (marketing)
@@ -278,6 +284,8 @@ Yuvmi
 ---
 
 ### 07 — Navigation Tree
+
+> **IA v1.** Güncel ağaç: [`IA.md`](./IA.md) §02 ve §06.
 
 ```text
 APP
@@ -367,6 +375,8 @@ APP
 ---
 
 ### 08 — Screen Inventory
+
+> **IA v1 envanter.** Güncel “sayfa / bölüm / tetiklenen” ayrımı: [`IA.md`](./IA.md) §03–§06.
 
 | # | Ekran | Amaç | Erişim |
 |---|-------|------|--------|
@@ -1055,7 +1065,7 @@ Haftalık DailyTask + TodayEntry + AlignmentSnapshot agregasyonu
 | 2 | Günlük görev kaç tane — kesinlikle 1 mi? | Odak vs esneklik | MVP: **1 hero görev**; opsiyonel "bonus" P2 |
 | 3 | Check-in zorunlu mu görev tamamlamak için? | Engagement | Hayır — bağımsız; check-in hizalanmayı güçlendirir ama gate değil |
 | 4 | Haftalık review hangi gün tetiklenir? | Bildirim zamanlaması | Pazar akşamı veya kullanıcı seçimi (ayarlarda) |
-| 5 | Plan şablonları kaç adet olmalı (MVP)? | Onboarding hızı | 8 yaşam alanı × 2–3 şablon = ~20 iskelet |
+| 5 | Plan şablonları kaç adet olmalı (MVP)? | Onboarding hızı | **Kapandı (2026-08-13):** sıfır. Yapı niyet alanları, içerik kullanıcıya ait. [`IA.md`](./IA.md) §05 |
 | 6 | Çift alanında "progress comparison" ne gösterir? | Sosyal tasarım | Karşılaştırma değil; yan yana **kendi** ilerlemeleri (no ranking) |
 | 7 | OAuth önceliği — Google mı Apple mı? | TR pazar | Her ikisi MVP; e-posta fallback |
 | 8 | Ödeme sağlayıcı — Stripe vs Iyzico? | TR compliance | Iyzico (TR), Stripe (global) — Phase 3 kararı |

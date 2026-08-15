@@ -2,7 +2,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { theme } from "@/theme";
 
 type EmptyStateProps = {
-  emoji: string;
+  emoji?: string;
   title: string;
   description: string;
 };
@@ -10,7 +10,7 @@ type EmptyStateProps = {
 export function EmptyState({ emoji, title, description }: EmptyStateProps) {
   return (
     <View style={styles.container}>
-      <Text style={styles.emoji}>{emoji}</Text>
+      {emoji ? <Text style={styles.emoji}>{emoji}</Text> : null}
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.description}>{description}</Text>
     </View>
@@ -20,24 +20,26 @@ export function EmptyState({ emoji, title, description }: EmptyStateProps) {
 const styles = StyleSheet.create({
   container: {
     alignItems: "center",
-    paddingVertical: theme.space.xxxl,
+    paddingVertical: theme.space.xxl,
     paddingHorizontal: theme.space.lg,
   },
   emoji: {
-    fontSize: 40,
-    marginBottom: theme.space.lg,
+    fontSize: 28,
+    marginBottom: theme.space.md,
   },
   title: {
+    fontFamily: theme.font.sansBold,
     fontSize: theme.font.size.lg,
-    fontWeight: theme.font.weight.semibold,
-    color: theme.color.text.primary,
+    fontWeight: theme.font.weight.bold,
+    color: theme.color.ink,
     textAlign: "center",
     marginBottom: theme.space.sm,
   },
   description: {
+    fontFamily: theme.font.sans,
     fontSize: theme.font.size.sm,
     lineHeight: 22,
-    color: theme.color.text.secondary,
+    color: theme.color.ink70,
     textAlign: "center",
   },
 });

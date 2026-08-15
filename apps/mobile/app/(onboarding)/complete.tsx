@@ -8,10 +8,9 @@ export default function OnboardingCompleteScreen() {
   return (
     <Screen scroll={false}>
       <View style={styles.center}>
-        <Text style={styles.emoji}>🌱</Text>
         <Text style={styles.title}>Yolculuğun başladı</Text>
         <Text style={styles.body}>
-          Bugün ekranından check-in yapabilir ve ilk adımını tamamlayabilirsin.
+          Bugün ekranından günlük kontrol yapabilir ve ilk adımını tamamlayabilirsin.
         </Text>
         <Button label="Bugün'e git" onPress={() => router.replace("/(tabs)")} />
       </View>
@@ -26,7 +25,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.space.xl,
     gap: theme.space.lg,
   },
-  emoji: { fontSize: 48, textAlign: "center" },
   title: {
     fontSize: theme.font.size.xxl,
     fontWeight: theme.font.weight.semibold,

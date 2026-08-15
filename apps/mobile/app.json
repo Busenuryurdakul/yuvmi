@@ -13,8 +13,9 @@
     },
     "android": {
       "package": "com.yuvmi.app",
+      "usesCleartextTraffic": true,
       "adaptiveIcon": {
-        "backgroundColor": "#FDF8F5"
+        "backgroundColor": "#E7ECF9"
       },
       "predictiveBackGestureEnabled": false
     },
@@ -22,7 +23,8 @@
       "expo-router",
       "expo-secure-store",
       "expo-apple-authentication",
-      "expo-notifications"
+      "expo-notifications",
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true

@@ -58,7 +58,7 @@ export default function DeleteAccountScreen() {
 
       <Card title="Onay">
         <Text style={styles.warning}>
-          Bu işlem geri alınamaz. Hedeflerin, check-in kayıtların, ortak alanların ve abonelik bilgilerin silinir.
+          Bu işlem geri alınamaz. Hedeflerin, günlük kontrol kayıtların, ortak alanların ve abonelik bilgilerin silinir.
         </Text>
         {needsPassword ? (
           <TextInput
