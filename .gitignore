@@ -25,6 +25,8 @@ expo-env.d.ts
 .idea/
 .vscode/
 .claude/
+.cursor/
+.cursor-plugin/
 .gemini/
 *.swp
 *.swo

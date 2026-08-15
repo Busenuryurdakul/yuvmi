@@ -96,7 +96,14 @@ async function requestWithRefresh<T>(
   });
 
   const text = await response.text();
-  const payload = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+  let payload: Record<string, unknown> = {};
+  if (text) {
+    try {
+      payload = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      throw new ApiError(`Geçersiz API yanıtı: ${text.slice(0, 100)}`, response.status);
+    }
+  }
 
   const canRefresh = response.status === 401 && !retried && !path.includes("/auth/refresh");
   if (canRefresh) {
@@ -138,6 +145,7 @@ export async function apiUpload<T>(
   formData: FormData,
   refreshToken?: string | null,
   onTokenRefreshed?: RequestOptions["onTokenRefreshed"],
+  _retried = false,
 ): Promise<T> {
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     method: "POST",
@@ -146,20 +154,36 @@ export async function apiUpload<T>(
       Authorization: `Bearer ${token}`,
     },
     body: formData,
+  }).catch(() => {
+    throw new ApiError(
+      `API'ye ulaşılamadı (${getApiBaseUrl()}). Backend çalışıyor mu?`,
+      0,
+    );
   });
 
-  if (response.status === 401) {
+  if (response.status === 401 && !_retried) {
     const sessionRefresh = await resolveRefreshToken(refreshToken);
     if (sessionRefresh) {
-      const refreshed = await refreshAuthToken(sessionRefresh);
-      const tokens = { token: refreshed.token, refreshToken: refreshed.refresh_token };
-      await persistRefreshedTokens(tokens, onTokenRefreshed);
-      return apiUpload(path, refreshed.token, formData, refreshed.refresh_token, onTokenRefreshed);
+      try {
+        const refreshed = await refreshAuthToken(sessionRefresh);
+        const tokens = { token: refreshed.token, refreshToken: refreshed.refresh_token };
+        await persistRefreshedTokens(tokens, onTokenRefreshed);
+        return apiUpload(path, refreshed.token, formData, refreshed.refresh_token, onTokenRefreshed, true);
+      } catch {
+        // fall through to error handling
+      }
     }
   }
 
   const text = await response.text();
-  const payload = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+  let payload: Record<string, unknown> = {};
+  if (text) {
+    try {
+      payload = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      throw new ApiError(`Geçersiz API yanıtı: ${text.slice(0, 100)}`, response.status);
+    }
+  }
 
   if (!response.ok) {
     throw parseApiError(payload, response.status);

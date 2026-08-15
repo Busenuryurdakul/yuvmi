@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError } from "@/lib/api/client";
 import type {
   AlignmentResponse,
@@ -32,6 +32,12 @@ export function useTodayDashboard() {
   const [plans, setPlans] = useState<PlanResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const refresh = useCallback(async () => {
     if (!user?.token) return;
@@ -49,6 +55,8 @@ export function useTodayDashboard() {
           fetchActiveGoal(user.token),
           fetchPlans(user.token),
         ]);
+
+      if (!mountedRef.current) return;
 
       setCheckin(checkinResult.status === "fulfilled" ? checkinResult.value : null);
       setTask(taskResult.status === "fulfilled" ? taskResult.value : null);
@@ -68,7 +76,7 @@ export function useTodayDashboard() {
         setError(err instanceof ApiError ? err.message : "Veriler yüklenemedi.");
       }
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   }, [user?.token]);
 

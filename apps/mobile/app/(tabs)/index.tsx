@@ -104,17 +104,6 @@ function shortLabel(title: string) {
   return title.length > 16 ? `${title.slice(0, 14)}…` : title;
 }
 
-function CandleIcon() {
-  return (
-    <View style={styles.candleMark} pointerEvents="none">
-      <View style={styles.candleFlame} />
-      <View style={styles.candleWick} />
-      <View style={styles.candleStem} />
-      <View style={styles.candleBase} />
-    </View>
-  );
-}
-
 function energyTarget(title: string, energy: EnergyLevel): string {
   const t = title.toLocaleLowerCase("tr");
   if (t.includes("günlük") || t.includes("yaz")) {
@@ -269,8 +258,6 @@ export default function TodayScreen() {
   const missDays = ticks.filter((t) => t === "none").length;
   const streak = streakFromTicks(ticks);
   const returns = plans.filter((p) => p.status === "superseded").length;
-  const waveTotal = useMemo(() => 0, []);
-
   const go = (i: number) => {
     const next = Math.max(0, Math.min(2, i));
     setSeg(next);
@@ -891,36 +878,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   bsmNText: { color: theme.color.ink70, fontFamily: theme.font.sansSemibold, fontWeight: theme.font.weight.semibold, fontSize: 13 },
-  ritualCard: { padding: 14, marginBottom: 8 },
-  ritualTitle: {
-    fontFamily: theme.font.sansBold,
-    fontWeight: theme.font.weight.bold,
-    fontSize: 14.5,
-    color: theme.color.ink,
-  },
-  anchor: { marginTop: 4, fontFamily: theme.font.mono, fontSize: 10, color: theme.color.ink40 },
-  tgrid: { flexDirection: "row", gap: 9, marginTop: 12 },
-  tool: {
-    flex: 1,
-    backgroundColor: "rgba(255,255,255,0.55)",
-    borderWidth: 1,
-    borderColor: theme.color.edge,
-    borderRadius: 16,
-    padding: 14,
-    ...theme.shadow.glass,
-  },
-  toolIc: { fontSize: 22, marginBottom: 6 },
-  candleMark: { width: 18, height: 26, alignItems: "center", marginBottom: 8 },
-  candleFlame: { width: 6, height: 9, borderRadius: 3, backgroundColor: theme.color.blue },
-  candleWick: { width: 1.5, height: 3, backgroundColor: theme.color.ink40, marginTop: 1 },
-  candleStem: { width: 7, height: 11, borderRadius: 1.5, backgroundColor: theme.color.ink },
-  candleBase: { width: 11, height: 2, borderRadius: 1, backgroundColor: theme.color.ink, marginTop: 1 },
-  toolTitle: {
-    fontFamily: theme.font.sansBold,
-    fontWeight: theme.font.weight.bold,
-    fontSize: 13.5,
-    color: theme.color.ink,
-  },
   banner: { padding: 14, marginBottom: 10 },
   bannerTitle: {
     fontFamily: theme.font.sansBold,
@@ -958,17 +915,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: theme.color.blueDeep,
   },
-  kv: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 10,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(11,18,32,0.09)",
-  },
-  kvLast: { borderBottomWidth: 0 },
-  kvB: { fontFamily: theme.font.sansSemibold, fontWeight: theme.font.weight.semibold, fontSize: 13, color: theme.color.ink, flex: 1 },
-  kvV: { fontFamily: theme.font.mono, fontSize: 11.5, color: theme.color.ink40, flexShrink: 1, textAlign: "right" },
   urge: {
     marginTop: 10,
     backgroundColor: "rgba(37,99,235,0.1)",
@@ -992,6 +938,4 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   doneVoice: { fontFamily: theme.font.mono, fontSize: 12, color: theme.color.blueDeep, marginBottom: 8 },
-  proof: { fontFamily: theme.font.sans, fontSize: 12.5, color: theme.color.ink70, lineHeight: 20, marginBottom: 8 },
-  proofN: { fontFamily: theme.font.sansBold, fontWeight: theme.font.weight.bold, color: theme.color.ink, fontSize: 15 },
 });

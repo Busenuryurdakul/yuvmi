@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from "react";
-import { Alert, Pressable, StyleSheet, Text, TextInput, View, ScrollView, Animated, Easing } from "react-native";
+import { useState, useEffect, useRef } from "react";
+import { Alert, Pressable, StyleSheet, Text, TextInput, View, ScrollView, Animated } from "react-native";
 import { router } from "expo-router";
 import { Screen } from "@/components/ui/Screen";
 import { SubpageBar } from "@/components/ui/SubpageBar";

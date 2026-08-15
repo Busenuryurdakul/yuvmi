@@ -298,6 +298,7 @@ func loadEnvFile() {
 		if err != nil {
 			continue
 		}
+		defer f.Close()
 		scanner := bufio.NewScanner(f)
 		for scanner.Scan() {
 			line := strings.TrimSpace(scanner.Text())
@@ -314,8 +315,7 @@ func loadEnvFile() {
 				}
 			}
 		}
-		_ = f.Close()
-		break
+		return
 	}
 }
 

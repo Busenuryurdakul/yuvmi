@@ -2,7 +2,7 @@ name: API Staging
 
 on:
   push:
-    branches: [main, feat/ayse-faz1-faz2-mvp]
+    branches: [main, feat/busenur-foundation-hardening]
     paths:
       - "apps/api/**"
       - ".github/workflows/api-staging.yml"

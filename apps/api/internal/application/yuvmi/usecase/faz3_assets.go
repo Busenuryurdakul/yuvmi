@@ -181,7 +181,10 @@ func (s *Service) RevokeAssetFromSpace(ctx context.Context, userID, assetID uuid
 	if err := s.assets.RevokeFromSpace(ctx, assetID); err != nil {
 		return nil, err
 	}
-	asset, _ = s.assets.GetByID(ctx, assetID)
+	asset, err = s.assets.GetByID(ctx, assetID)
+	if err != nil {
+		return nil, fmt.Errorf("reload asset: %w", err)
+	}
 	return s.toAssetResponse(asset, userID), nil
 }
 

@@ -162,7 +162,10 @@ func (h *Handler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req dto.DeleteAccountRequest
-	_ = validator.DecodeAndValidate(r, &req)
+	if err := validator.DecodeAndValidate(r, &req); err != nil {
+		response.JSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
 
 	if err := h.deleteAccountUC.Execute(r.Context(), userID, req); err != nil {
 		response.Error(w, err)

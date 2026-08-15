@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 
 type OnboardingContextValue = {
   goalId: string | null;
@@ -14,19 +14,18 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   const [goalId, setGoalId] = useState<string | null>(null);
   const [planId, setPlanId] = useState<string | null>(null);
 
+  const reset = useCallback(() => {
+    setGoalId(null);
+    setPlanId(null);
+  }, []);
+
+  const value = useMemo<OnboardingContextValue>(
+    () => ({ goalId, setGoalId, planId, setPlanId, reset }),
+    [goalId, planId, reset],
+  );
+
   return (
-    <OnboardingContext.Provider
-      value={{
-        goalId,
-        setGoalId,
-        planId,
-        setPlanId,
-        reset: () => {
-          setGoalId(null);
-          setPlanId(null);
-        },
-      }}
-    >
+    <OnboardingContext.Provider value={value}>
       {children}
     </OnboardingContext.Provider>
   );

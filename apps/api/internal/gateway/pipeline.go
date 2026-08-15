@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/masterfabric-go/masterfabric/internal/domain/apimanagement/model"
@@ -16,6 +17,17 @@ import (
 	"github.com/masterfabric-go/masterfabric/internal/shared/middleware"
 	"github.com/masterfabric-go/masterfabric/internal/shared/response"
 	"github.com/redis/go-redis/v9"
+)
+
+type pipelineContextKey string
+
+const (
+	ctxKeyEndpointSchema pipelineContextKey = "endpoint_schema"
+	ctxKeyPIIMasking     pipelineContextKey = "pii_masking"
+	ctxKeyEndpointID     pipelineContextKey = "endpoint_id"
+	ctxKeyAppID          pipelineContextKey = "app_id"
+	ctxKeyOrgID          pipelineContextKey = "org_id"
+	ctxKeyUserID         pipelineContextKey = "user_id"
 )
 
 // Pipeline is the gateway policy pipeline that enforces policies on managed endpoints.
@@ -143,16 +155,15 @@ func (p *Pipeline) Enforce(next http.Handler) http.Handler {
 			}
 		}
 
-		// 6. Prepare context for interceptors
-		ctx = context.WithValue(ctx, "endpoint_schema", endpoint.Schema)
-		ctx = context.WithValue(ctx, "pii_masking", endpoint.PIIMasking)
-		ctx = context.WithValue(ctx, "endpoint_id", endpoint.ID.String())
-		ctx = context.WithValue(ctx, "app_id", appID.String())
+		ctx = context.WithValue(ctx, ctxKeyEndpointSchema, endpoint.Schema)
+		ctx = context.WithValue(ctx, ctxKeyPIIMasking, endpoint.PIIMasking)
+		ctx = context.WithValue(ctx, ctxKeyEndpointID, endpoint.ID.String())
+		ctx = context.WithValue(ctx, ctxKeyAppID, appID.String())
 		if orgID, ok := middleware.OrgIDFromContext(ctx); ok {
-			ctx = context.WithValue(ctx, "org_id", orgID.String())
+			ctx = context.WithValue(ctx, ctxKeyOrgID, orgID.String())
 		}
 		if userID, ok := middleware.UserIDFromContext(ctx); ok {
-			ctx = context.WithValue(ctx, "user_id", userID.String())
+			ctx = context.WithValue(ctx, ctxKeyUserID, userID.String())
 		}
 		r = r.WithContext(ctx)
 
@@ -208,44 +219,7 @@ func (p *Pipeline) Enforce(next http.Handler) http.Handler {
 			"backend_action":  endpoint.BackendAction,
 			"note":            fmt.Sprintf("No handler found for '%s'. Register a handler or configure HTTP proxy.", endpoint.BackendService),
 		})
-		return
-
-		// 9. Apply response interceptors (if needed)
-		// Note: Full response interception requires capturing the response,
-		// which is more complex. For now, we handle it in middleware or
-		// use a response wrapper.
 	})
-}
-
-// responseWriter wraps http.ResponseWriter to capture response for interceptors.
-type responseWriter struct {
-	http.ResponseWriter
-	statusCode int
-	header     http.Header
-	wroteHeader bool
-}
-
-func (rw *responseWriter) Header() http.Header {
-	return rw.header
-}
-
-func (rw *responseWriter) WriteHeader(code int) {
-	if rw.wroteHeader {
-		return
-	}
-	rw.statusCode = code
-	rw.wroteHeader = true
-	for k, v := range rw.header {
-		rw.ResponseWriter.Header()[k] = v
-	}
-	rw.ResponseWriter.WriteHeader(code)
-}
-
-func (rw *responseWriter) Write(b []byte) (int, error) {
-	if !rw.wroteHeader {
-		rw.WriteHeader(http.StatusOK)
-	}
-	return rw.ResponseWriter.Write(b)
 }
 
 // checkRateLimit uses a Redis sliding window counter.
@@ -260,7 +234,7 @@ func (p *Pipeline) checkRateLimit(r *http.Request, appID, endpointID uuid.UUID, 
 
 	if count == 1 {
 		// Set TTL on first request in the window (1 minute window)
-		p.redis.Expire(ctx, key, 60_000_000_000) // 60 seconds in nanoseconds
+		p.redis.Expire(ctx, key, 60*time.Second)
 	}
 
 	if count > int64(limit) {

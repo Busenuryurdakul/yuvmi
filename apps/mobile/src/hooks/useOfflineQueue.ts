@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError } from "@/lib/api/client";
 import { completeTask, skipTask, upsertCheckin } from "@/lib/api/yuvmi";
 import type { LifeDomain } from "@yuvmi/shared";
@@ -94,6 +94,7 @@ function filterOutTaskAction(items: OfflineQueueItem[], taskId: string): Offline
 export function useOfflineQueue(token: string | null | undefined) {
   const [pendingCount, setPendingCount] = useState(0);
   const [flushing, setFlushing] = useState(false);
+  const flushingRef = useRef(false);
 
   const refreshCount = useCallback(async () => {
     const items = dedupeQueue(await loadQueue());
@@ -122,34 +123,39 @@ export function useOfflineQueue(token: string | null | undefined) {
   );
 
   const flush = useCallback(async () => {
-    if (!token || flushing) return;
+    if (!token || flushingRef.current) return;
     const items = dedupeQueue(await loadQueue());
     if (items.length === 0) return;
 
+    flushingRef.current = true;
     setFlushing(true);
     const remaining: OfflineQueueItem[] = [];
 
-    for (const item of items) {
-      try {
-        if (item.type === "checkin") {
-          await upsertCheckin(token, item.payload);
-        } else if (item.type === "task_complete") {
-          await completeTask(token, item.payload.taskId);
-        } else if (item.type === "task_skip") {
-          await skipTask(token, item.payload.taskId, item.payload.reason);
+    try {
+      for (const item of items) {
+        try {
+          if (item.type === "checkin") {
+            await upsertCheckin(token, item.payload);
+          } else if (item.type === "task_complete") {
+            await completeTask(token, item.payload.taskId);
+          } else if (item.type === "task_skip") {
+            await skipTask(token, item.payload.taskId, item.payload.reason);
+          }
+        } catch (error) {
+          if (isStaleError(error)) {
+            continue;
+          }
+          remaining.push(item);
         }
-      } catch (error) {
-        if (isStaleError(error)) {
-          continue;
-        }
-        remaining.push(item);
       }
-    }
 
-    await saveQueue(remaining);
-    setPendingCount(remaining.length);
-    setFlushing(false);
-  }, [token, flushing]);
+      await saveQueue(remaining);
+      setPendingCount(remaining.length);
+    } finally {
+      flushingRef.current = false;
+      setFlushing(false);
+    }
+  }, [token]);
 
   useEffect(() => {
     void refreshCount();

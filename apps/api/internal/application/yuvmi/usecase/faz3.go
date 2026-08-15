@@ -235,7 +235,10 @@ func (s *Service) AcceptSpaceInvite(ctx context.Context, userID, inviteID uuid.U
 		fmt.Sprintf("%s \"%s\" alanına katıldı.", user.FullName(), space.Name),
 		"space_invite_accepted", map[string]string{"spaceId": inv.SpaceID.String()})
 
-	space, _ = s.spaces.GetByID(ctx, inv.SpaceID)
+	space, err = s.spaces.GetByID(ctx, inv.SpaceID)
+	if err != nil {
+		return nil, fmt.Errorf("reload space: %w", err)
+	}
 	return s.buildSpaceResponse(ctx, space, userID)
 }
 

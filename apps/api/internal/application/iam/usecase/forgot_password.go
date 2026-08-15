@@ -61,7 +61,9 @@ func (uc *ForgotPasswordUseCase) Execute(ctx context.Context, req dto.ForgotPass
 
 	resetURL := fmt.Sprintf("%s/reset-password?token=%s", strings.TrimRight(uc.cfg.AppBaseURL, "/"), token)
 	if uc.smtp.Host != "" {
-		_ = uc.sendEmail(user.Email, "Yuvmi şifre sıfırlama", fmt.Sprintf("Şifrenizi sıfırlamak için: %s\n\nBağlantı 1 saat geçerlidir.", resetURL))
+		if err := uc.sendEmail(user.Email, "Yuvmi şifre sıfırlama", fmt.Sprintf("Şifrenizi sıfırlamak için: %s\n\nBağlantı 1 saat geçerlidir.", resetURL)); err != nil && uc.log != nil {
+			uc.log.Error("failed to send password reset email", "error", err)
+		}
 	} else if uc.cfg.LogPasswordReset && uc.log != nil {
 		uc.log.Info("password reset token (dev/staging)", "email", user.Email, "reset_url", resetURL)
 	}

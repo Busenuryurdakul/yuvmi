@@ -16,8 +16,7 @@ export type AuthUser = OAuthProfile & {
 
 export const AUTH_STORAGE_KEY = "yuvmi.auth.session";
 
-/** Dev-only password shared with backend when YUVMI_ALLOW_DEV_OAUTH=1 */
-export const DEV_OAUTH_PASSWORD = "yuvmi-dev-12345678";
+export const DEV_OAUTH_PASSWORD = process.env.EXPO_PUBLIC_DEV_OAUTH_PASSWORD ?? "";
 
 export function isDevAuthAllowed(): boolean {
   return __DEV__ || process.env.EXPO_PUBLIC_ALLOW_DEV_AUTH === "1";

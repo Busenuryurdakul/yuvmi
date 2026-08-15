@@ -270,7 +270,10 @@ func (h *Handler) SkipTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req dto.SkipTaskRequest
-	_ = validator.DecodeAndValidate(r, &req)
+	if err := validator.DecodeAndValidate(r, &req); err != nil {
+		response.YuvmiFail(w, err)
+		return
+	}
 	data, err := h.svc.SkipTask(r.Context(), userID, taskID, req.Reason)
 	if err != nil {
 		response.YuvmiFail(w, err)

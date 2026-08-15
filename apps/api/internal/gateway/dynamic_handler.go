@@ -10,8 +10,10 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,6 +22,15 @@ import (
 	"github.com/masterfabric-go/masterfabric/internal/domain/apimanagement/model"
 	"github.com/masterfabric-go/masterfabric/internal/shared/middleware"
 )
+
+var validIdentifier = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]{0,62}$`)
+
+func sanitizeIdentifier(name string) (string, error) {
+	if !validIdentifier.MatchString(name) {
+		return "", fmt.Errorf("invalid SQL identifier: %q", name)
+	}
+	return name, nil
+}
 
 // DynamicHandlerResolver resolves handlers dynamically based on endpoint configuration.
 // It supports multiple strategies:
@@ -31,7 +42,8 @@ type DynamicHandlerResolver struct {
 	httpClient    *http.Client
 	logger        *slog.Logger
 	db            *pgxpool.Pool
-	serviceConfig map[string]ServiceConfig // Maps service name to configuration
+	mu            sync.RWMutex
+	serviceConfig map[string]ServiceConfig
 }
 
 // ServiceConfig holds configuration for a backend service.
@@ -62,9 +74,9 @@ func NewDynamicHandlerResolver(registry *BackendRegistry, logger *slog.Logger, d
 	}
 }
 
-// RegisterServiceConfig registers configuration for a backend service.
-// This allows services to be proxied to external URLs dynamically.
 func (r *DynamicHandlerResolver) RegisterServiceConfig(serviceName string, config ServiceConfig) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if r.serviceConfig == nil {
 		r.serviceConfig = make(map[string]ServiceConfig)
 	}
@@ -76,17 +88,16 @@ func (r *DynamicHandlerResolver) Handle(ctx context.Context, endpoint *model.End
 	return r.ResolveHandler(ctx, endpoint, req)
 }
 
-// IsRegistered checks if a service has a registered handler or configuration.
 func (r *DynamicHandlerResolver) IsRegistered(serviceName string) bool {
-	// Check if handler is registered
 	if r.registry != nil && r.registry.IsRegistered(serviceName) {
 		return true
 	}
-	// Check if service has configuration
-	if _, hasConfig := r.serviceConfig[serviceName]; hasConfig {
+	r.mu.RLock()
+	_, hasConfig := r.serviceConfig[serviceName]
+	r.mu.RUnlock()
+	if hasConfig {
 		return true
 	}
-	// Check if service name is a URL
 	return isURL(serviceName)
 }
 
@@ -103,8 +114,10 @@ func (r *DynamicHandlerResolver) ResolveHandler(ctx context.Context, endpoint *m
 		return r.registry.Handle(ctx, endpoint, req)
 	}
 
-	// Strategy 2: Check if backend_service is a URL or has service config
-	if config, hasConfig := r.serviceConfig[serviceName]; hasConfig && config.BaseURL != "" {
+	r.mu.RLock()
+	config, hasConfig := r.serviceConfig[serviceName]
+	r.mu.RUnlock()
+	if hasConfig && config.BaseURL != "" {
 		return r.handleHTTPProxy(ctx, endpoint, req, config)
 	}
 
@@ -246,10 +259,13 @@ func (r *DynamicHandlerResolver) handleGeneric(ctx context.Context, endpoint *mo
 		return r.errorResponse(http.StatusBadRequest, "invalid app ID"), nil
 	}
 
-	// Derive table name dynamically from backend_service
-	tableName := r.deriveTableName(endpoint)
-	if tableName == "" {
+	rawTable := r.deriveTableName(endpoint)
+	if rawTable == "" {
 		return r.errorResponse(http.StatusBadRequest, fmt.Sprintf("cannot determine table for service: %s", endpoint.BackendService)), nil
+	}
+	tableName, err := sanitizeIdentifier(rawTable)
+	if err != nil {
+		return r.errorResponse(http.StatusBadRequest, "invalid table name"), nil
 	}
 
 	// Check if database is available
@@ -415,7 +431,11 @@ func (r *DynamicHandlerResolver) handleCreate(ctx context.Context, tableName str
 
 	for key, value := range input {
 		if key != "id" && key != "organization_id" && key != "app_id" && key != "created_at" && key != "updated_at" {
-			columns = append(columns, key)
+			col, colErr := sanitizeIdentifier(key)
+			if colErr != nil {
+				return nil, 0, fmt.Errorf("invalid column name: %s", key)
+			}
+			columns = append(columns, col)
 			values = append(values, value)
 			placeholders = append(placeholders, fmt.Sprintf("$%d", paramIndex))
 			paramIndex++
@@ -458,7 +478,11 @@ func (r *DynamicHandlerResolver) handleUpdate(ctx context.Context, tableName str
 
 	for key, value := range input {
 		if key != "id" && key != "organization_id" && key != "app_id" && key != "created_at" && key != "updated_at" {
-			setParts = append(setParts, fmt.Sprintf("%s = $%d", key, paramIndex))
+			col, colErr := sanitizeIdentifier(key)
+			if colErr != nil {
+				return nil, 0, fmt.Errorf("invalid column name: %s", key)
+			}
+			setParts = append(setParts, fmt.Sprintf("%s = $%d", col, paramIndex))
 			values = append(values, value)
 			paramIndex++
 		}

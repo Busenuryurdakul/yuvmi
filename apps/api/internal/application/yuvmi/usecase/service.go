@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -285,7 +286,9 @@ func (s *Service) ActivatePlan(ctx context.Context, userID, planID uuid.UUID) (*
 	if err != nil {
 		return nil, err
 	}
-	_ = s.plans.SupersedeOthers(ctx, userID, planID)
+	if err := s.plans.SupersedeOthers(ctx, userID, planID); err != nil {
+		return nil, fmt.Errorf("supersede plans: %w", err)
+	}
 	if err := s.plans.Activate(ctx, userID, planID); err != nil {
 		return nil, err
 	}
@@ -297,14 +300,23 @@ func (s *Service) ActivatePlan(ctx context.Context, userID, planID uuid.UUID) (*
 		UserID: userID, PlanID: plan.ID, Date: today,
 		Title: step.Title, Description: step.Description, Status: goalmodel.TaskPending,
 	}
-	_ = s.tasks.Create(ctx, task)
+	if err := s.tasks.Create(ctx, task); err != nil {
+		return nil, fmt.Errorf("create daily task: %w", err)
+	}
 
 	if plan.GoalID != nil {
-		_ = s.goals.Activate(ctx, userID, *plan.GoalID)
+		if err := s.goals.Activate(ctx, userID, *plan.GoalID); err != nil {
+			return nil, fmt.Errorf("activate goal: %w", err)
+		}
 	}
-	_ = s.profiles.SetOnboardingComplete(ctx, userID)
+	if err := s.profiles.SetOnboardingComplete(ctx, userID); err != nil {
+		return nil, fmt.Errorf("set onboarding complete: %w", err)
+	}
 
-	plan, _ = s.plans.GetByID(ctx, userID, planID)
+	plan, err = s.plans.GetByID(ctx, userID, planID)
+	if err != nil {
+		return nil, err
+	}
 	return toPlanResponse(plan), nil
 }
 

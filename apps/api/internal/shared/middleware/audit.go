@@ -1,30 +1,33 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/masterfabric-go/masterfabric/internal/domain/audit/model"
 	"github.com/masterfabric-go/masterfabric/internal/domain/audit/repository"
 )
 
-// AuditLog is middleware that records audit log entries for each request.
 func AuditLog(auditRepo repository.AuditRepository) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Serve the request first
+			orgID, _ := TenantIDFromContext(r.Context())
+			userID, _ := UserIDFromContext(r.Context())
+			method := r.Method
+			path := r.URL.Path
+			remoteAddr := r.RemoteAddr
+			userAgent := r.UserAgent()
+
 			wrapped := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
 			next.ServeHTTP(wrapped, r)
 
-			// Record audit log asynchronously (best-effort)
+			requestID := w.Header().Get(RequestIDHeader)
+
 			go func() {
-				ctx := r.Context()
-
-				orgID, _ := TenantIDFromContext(ctx)
-				userID, _ := UserIDFromContext(ctx)
-
-				// Get request ID from response header (set by RequestID middleware)
-				requestID := w.Header().Get(RequestIDHeader)
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
 
 				var userIDPtr *uuid.UUID
 				if userID != uuid.Nil {
@@ -35,14 +38,13 @@ func AuditLog(auditRepo repository.AuditRepository) func(http.Handler) http.Hand
 					OrganizationID: orgID,
 					UserID:         userIDPtr,
 					RequestID:      requestID,
-					Action:         r.Method + " " + r.URL.Path,
+					Action:         method + " " + path,
 					ResourceType:   "http_request",
-					ResourceID:     r.URL.Path,
-					IPAddress:      r.RemoteAddr,
-					UserAgent:      r.UserAgent(),
+					ResourceID:     path,
+					IPAddress:      remoteAddr,
+					UserAgent:      userAgent,
 				}
 
-				// Best-effort: ignore errors
 				_ = auditRepo.Create(ctx, entry)
 			}()
 		})
