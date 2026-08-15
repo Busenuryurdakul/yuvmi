@@ -56,13 +56,11 @@ export const SPACE_TYPES: Record<
 
 /** Features available per space type */
 export const SPACE_FEATURES_BY_TYPE: Record<SpaceType, string[]> = {
-  personal: ["shared_vision_board", "dream_journal", "private_notes"],
-  couple: [
-    "shared_vision_board",
-    "compatibility_insights",
-    "joint_affirmations",
-    "progress_comparison",
-  ],
+  personal: ["shared_vision_board", "private_notes"],
+  couple: ["shared_vision_board", "joint_affirmations", "progress_comparison"],
   friends: ["progress_comparison", "joint_affirmations"],
   family: ["shared_vision_board", "progress_comparison"],
 };
+
+export { PLAN_TEMPLATES } from "./plan-templates";
+export type { PlanTemplate, PlanTemplateStep } from "./plan-templates";

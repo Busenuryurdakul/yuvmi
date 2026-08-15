@@ -39,5 +39,9 @@ yarn-error.log*
 # Vercel
 .vercel
 
-# Testing
-coverage/
+# Go
+apps/api/bin/
+.tmp-masterfabric-go/
+
+*.exe
+

@@ -13,9 +13,7 @@ export type VisibilityLevel = "private" | "space_members" | "specific_members";
 
 export type SpaceFeature =
   | "shared_vision_board"
-  | "compatibility_insights"
   | "joint_affirmations"
-  | "dream_journal"
   | "progress_comparison"
   | "private_notes";
 
