@@ -24,6 +24,8 @@ expo-env.d.ts
 # IDE
 .idea/
 .vscode/
+.claude/
+.gemini/
 *.swp
 *.swo
 

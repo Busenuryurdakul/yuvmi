@@ -11,16 +11,21 @@ type SubpageBarProps = {
   onBack?: () => void;
 };
 
+function BackChevron() {
+  return <View style={styles.chevron} pointerEvents="none" />;
+}
+
 export function SubpageBar({ title, right, onBack }: SubpageBarProps) {
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.bar, { paddingTop: insets.top + 10 }]}>
       <Pressable
         accessibilityRole="button"
+        accessibilityLabel="Geri"
         onPress={onBack ?? (() => router.back())}
         style={styles.back}
       >
-        <Text style={styles.backText}>←</Text>
+        <BackChevron />
       </Pressable>
       <Text style={styles.title} numberOfLines={1}>
         {title}
@@ -49,9 +54,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  backText: {
-    fontSize: 16,
-    color: theme.color.ink,
+  chevron: {
+    width: 9,
+    height: 9,
+    marginLeft: 2,
+    borderLeftWidth: 2.25,
+    borderBottomWidth: 2.25,
+    borderColor: theme.color.ink,
+    borderRadius: 1.25,
+    transform: [{ rotate: "45deg" }],
   },
   title: {
     flex: 1,

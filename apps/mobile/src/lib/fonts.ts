@@ -1,4 +1,3 @@
-import { Caveat_600SemiBold } from "@expo-google-fonts/caveat";
 import { DMMono_400Regular, DMMono_500Medium } from "@expo-google-fonts/dm-mono";
 import {
   SchibstedGrotesk_400Regular,
@@ -18,6 +17,5 @@ export function useAppFonts() {
     SchibstedGrotesk_800ExtraBold,
     DMMono_400Regular,
     DMMono_500Medium,
-    Caveat_600SemiBold,
   });
 }

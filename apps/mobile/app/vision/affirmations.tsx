@@ -124,7 +124,7 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: "absolute",
-    right: 18,
+    alignSelf: "center",
     bottom: 22,
     zIndex: 5,
     width: 52,

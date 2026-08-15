@@ -45,7 +45,9 @@ Yuvmi'nin AI katmanı, kullanıcının kendi kelimeleriyle tanımladığı yolcu
 | # | Özellik | Girdi | Çıktı | Consent scope |
 |---|---------|-------|-------|---------------|
 | 1 | Gelecekteki Ben profili | Onboarding cevapları, seçili alanlar | `FutureSelf` taslağı (title, description, domains, affirmations) | `ai_profile_generation` |
+| 1b | **Hedef önerileri (onboarding adım 3)** | Onaylı/draft `FutureSelf` (başlık, açıklama, alanlar, olumlama) + kullanıcı dil tercihi | 4–6 kısa hedef chip metni (tıklanınca başlık alanını doldurur) | `ai_profile_generation` veya yeni `ai_goal_suggestions` |
 | 2 | Plan oluşturma | Onaylı FutureSelf + Goal | `Plan` taslağı (title, description, adım listesi) | `ai_plan_generation` |
+| 2b | **Plan şablon önerileri (onboarding adım 4)** | FutureSelf + Goal (başlık, açıklama, `targetDate`) + seçili alanlar | 3–5 kişiselleştirilmiş plan kartı (başlık, kısa açıklama, 4 adım iskeleti); mevcut `PLAN_TEMPLATES` sıralama/fallback | `ai_plan_generation` |
 | 3 | Günlük görev | Aktif Plan, son check-in'ler, tamamlanan görevler | Tek `DailyTask` (title, description) | `ai_daily_task` |
 | 4 | Haftalık değerlendirme | Haftalık metrikler + opsiyonel yansıma | `WeeklyReview` (summary, adaptations[], plan diff) | `ai_weekly_review` |
 
@@ -166,11 +168,54 @@ Gelecekteki Ben → "Sohbet et" (Premium gate)
 |-------|---------------------|------------|
 | AI Consent | `(onboarding)/ai-consent` | Yeni |
 | Future Self Builder | `(onboarding)/future-self` | "AI ile oluştur" butonu |
+| **Goal (Hedefin)** | `(onboarding)/goal` | **AI hedef chip'leri** — adım 1–2 verisine göre |
+| **Plan (Planın)** | `(onboarding)/plan` | **AI plan kartları** — adım 1–3 verisine göre öneri listesi |
 | Plan Review | `(onboarding)/plan-review` | AI diff + onay |
 | Daily Task | `(tabs)/index` veya modal | AI badge: "Sana özel" |
 | Weekly Review | `journey/weekly-review` | AI summary bölümü |
 | AI Chat | `future-self/chat` | Premium |
 | Privacy & AI | `profile/privacy` | Consent toggles |
+
+### Onboarding adım 3 — AI hedef chip'leri (planlanan)
+
+**Durum (2026-08):** Geçici olarak statik `GOAL_IDEAS` — yalnızca seçili `LifeDomain` listesine göre sabit metinler. **Hedef:** Kurulum adım 1–2'deki kişisel veriye göre dinamik öneri.
+
+**Girdi (PII-safe özet):**
+- `FutureSelf.title`, `description`, `domains[]`, `affirmations[0]`
+- Onay durumu (`draft` | `approved`)
+
+**UI:**
+- Mevcut chip satırı korunur; etiket: *"Senin için öneriler"* + `AIBadge`
+- `generating` → `AIGeneratingSkeleton` chip alanında
+- Consent yok → mevcut statik fallback (`buildSuggestions`)
+- Chip tıklanınca `title` alanı dolar (mevcut davranış)
+
+**API (öneri):** `POST /api/v1/ai/goal-suggestions` → `{ suggestions: string[] }`  
+**Mobil:** `fetchGoalSuggestions(token, { futureSelfId })` — `goal.tsx` içinde `useFocusEffect` ile yükle.
+
+**Not:** Plan adımı (4) için ayrıca `ai_plan_generation`; hedef chip'leri profil bağlamından türetilir, plan henüz yokken çalışır.
+
+**Süre / tarih:** Sabit chip'ler kaldırıldı. Kullanıcı takvimden tarih seçer veya serbest metin süre yazar (`3 ay`, `6 hafta`, `90 gün`). AI fazında aynı alana öneri eklenebilir.
+
+### Onboarding adım 4 — AI plan önerileri (planlanan)
+
+**Durum (2026-08):** `getRecommendedPlanTemplates(domains)` — yalnızca seçili yaşam alanına göre sabit şablon sıralaması (`PlanTemplatePicker`, etiket: *Seçtiğin alanlara göre önerilen planlar*). Hedef metni ve vizyon cümlesi kullanılmıyor.
+
+**Hedef:** Kurulum adım 1–3 verisine göre kişiselleştirilmiş plan kartları (AI). Kullanıcı birini seçer, sonra `Planı onayla` ile kaydeder — otomatik uygulanmaz.
+
+**Girdi (PII-safe özet):**
+- `FutureSelf.title`, `description`, `domains[]`, `affirmations[0]`
+- `Goal.title`, `description`, `targetDate`
+- Dil: `tr`
+
+**UI:**
+- Mevcut kart listesi korunur; üstte `AIBadge` + *"Senin için öneriler"*
+- `generating` → `AIGeneratingSkeleton` kart alanında
+- Consent yok / hata → mevcut `getRecommendedPlanTemplates` fallback
+- AI kartı seçilince adımlar önizlenebilir (opsiyonel accordion)
+
+**API (öneri):** `POST /api/v1/ai/plan-suggestions` → `{ templates: PlanTemplate[] }`  
+**Mobil:** `fetchPlanSuggestions(token, { futureSelfId, goalId })` — `plan.tsx` içinde `useFocusEffect` ile yükle.
 
 ### AI UI component'leri
 

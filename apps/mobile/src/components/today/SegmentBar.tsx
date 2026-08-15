@@ -1,19 +1,23 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { theme } from "@/theme";
 
-const LABELS = ["İstatistik", "Niyet", "Hâl"] as const;
+const LABELS = ["İstatistik", "Plan", "Hâl"] as const;
 
 type SegmentBarProps = {
   index: number;
   onChange: (index: number) => void;
+  labels?: readonly string[];
+  style?: StyleProp<ViewStyle>;
 };
 
-export function SegmentBar({ index, onChange }: SegmentBarProps) {
+export function SegmentBar({ index, onChange, labels = LABELS, style }: SegmentBarProps) {
   return (
-    <View style={styles.seg}>
-      {LABELS.map((label, i) => (
+    <View style={[styles.seg, style]}>
+      {labels.map((label, i) => (
         <Pressable key={label} onPress={() => onChange(i)} style={[styles.sg, index === i && styles.on]}>
-          <Text style={[styles.label, index === i && styles.labelOn]}>{label}</Text>
+          <Text style={[styles.label, index === i && styles.labelOn]} numberOfLines={1}>
+            {label}
+          </Text>
         </Pressable>
       ))}
     </View>
@@ -23,7 +27,7 @@ export function SegmentBar({ index, onChange }: SegmentBarProps) {
 const styles = StyleSheet.create({
   seg: {
     flexDirection: "row",
-    gap: 4,
+    gap: 3,
     marginTop: 14,
     marginBottom: 12,
     padding: 4,
@@ -36,6 +40,7 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 12,
     paddingVertical: 9,
+    paddingHorizontal: 2,
     alignItems: "center",
   },
   on: {
@@ -48,8 +53,8 @@ const styles = StyleSheet.create({
   },
   label: {
     fontFamily: theme.font.mono,
-    fontSize: 10,
-    letterSpacing: 0.8,
+    fontSize: 9,
+    letterSpacing: 0.4,
     textTransform: "uppercase",
     color: theme.color.ink40,
   },

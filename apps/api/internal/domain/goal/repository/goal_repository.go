@@ -11,7 +11,9 @@ import (
 type GoalRepository interface {
 	Create(ctx context.Context, goal *model.Goal) error
 	GetActiveByUserID(ctx context.Context, userID uuid.UUID) (*model.Goal, error)
+	GetLatestByUserID(ctx context.Context, userID uuid.UUID) (*model.Goal, error)
 	GetByID(ctx context.Context, userID, goalID uuid.UUID) (*model.Goal, error)
+	Update(ctx context.Context, goal *model.Goal) error
 	Activate(ctx context.Context, userID, goalID uuid.UUID) error
 	CountByUserID(ctx context.Context, userID uuid.UUID) (int, error)
 }

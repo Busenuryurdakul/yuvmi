@@ -33,11 +33,11 @@ export type FutureSelfResponse = {
   id: string;
   title: string;
   description: string;
-  domains: LifeDomain[];
+  domains: string[];
   affirmations: string[];
   visionItems: Array<{
     id: string;
-    domain: LifeDomain;
+    domain: string;
     title: string;
     imageUrl?: string;
     note?: string;

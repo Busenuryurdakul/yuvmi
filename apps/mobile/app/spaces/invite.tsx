@@ -98,7 +98,13 @@ function Row({
   return (
     <View style={[styles.kv, last && styles.kvLast]}>
       <Text style={styles.kvLabel}>{label}</Text>
-      <Switch value={value} onChange={onChange} />
+      <Switch
+        value={value}
+        onValueChange={onChange}
+        trackColor={{ false: "rgba(11, 18, 32, 0.12)", true: theme.color.blue }}
+        thumbColor="#ffffff"
+        ios_backgroundColor="rgba(11, 18, 32, 0.08)"
+      />
     </View>
   );
 }

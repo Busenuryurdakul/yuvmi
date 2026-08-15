@@ -10,8 +10,9 @@ import { theme } from "@/theme";
 
 export default function AreaNoteScreen() {
   const { domain } = useLocalSearchParams<{ domain: string }>();
-  const key = (domain ?? "career") as LifeDomain;
-  const title = LIFE_DOMAINS[key]?.label.tr ?? domain ?? "Alan";
+  const raw = Array.isArray(domain) ? domain[0] : domain;
+  const key = decodeURIComponent(raw ?? "career");
+  const title = LIFE_DOMAINS[key as LifeDomain]?.label.tr ?? key;
   const [now, setNow] = useState("");
   const [want, setWant] = useState("");
   const [savedAt, setSavedAt] = useState<string | undefined>();

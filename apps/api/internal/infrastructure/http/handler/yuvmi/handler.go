@@ -148,6 +148,37 @@ func (h *Handler) GetActiveGoal(w http.ResponseWriter, r *http.Request) {
 	response.YuvmiData(w, http.StatusOK, data)
 }
 
+func (h *Handler) GetCurrentGoal(w http.ResponseWriter, r *http.Request) {
+	userID := mustUserID(w, r)
+	if userID == uuid.Nil {
+		return
+	}
+	data, err := h.svc.GetCurrentGoal(r.Context(), userID)
+	if err != nil {
+		response.YuvmiFail(w, err)
+		return
+	}
+	response.YuvmiData(w, http.StatusOK, data)
+}
+
+func (h *Handler) UpdateGoal(w http.ResponseWriter, r *http.Request) {
+	userID := mustUserID(w, r)
+	if userID == uuid.Nil {
+		return
+	}
+	var req dto.CreateGoalRequest
+	if err := validator.DecodeAndValidate(r, &req); err != nil {
+		response.YuvmiFail(w, err)
+		return
+	}
+	data, err := h.svc.UpdateGoal(r.Context(), userID, req)
+	if err != nil {
+		response.YuvmiFail(w, err)
+		return
+	}
+	response.YuvmiData(w, http.StatusOK, data)
+}
+
 func (h *Handler) CreatePlan(w http.ResponseWriter, r *http.Request) {
 	userID := mustUserID(w, r)
 	if userID == uuid.Nil {

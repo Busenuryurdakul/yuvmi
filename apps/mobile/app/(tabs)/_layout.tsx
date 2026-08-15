@@ -20,9 +20,9 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen name="index" options={{ title: "Bugün" }} />
-      <Tabs.Screen name="future-self" options={{ title: "Vizyon" }} />
       <Tabs.Screen name="journey" options={{ title: "Yolculuk" }} />
-      <Tabs.Screen name="spaces" options={{ title: "Alanlar" }} />
+      <Tabs.Screen name="yuvmi" options={{ title: "Yuvmi" }} />
+      <Tabs.Screen name="atolye" options={{ title: "Atölye" }} />
       <Tabs.Screen name="profile" options={{ title: "Profil" }} />
     </Tabs>
   );

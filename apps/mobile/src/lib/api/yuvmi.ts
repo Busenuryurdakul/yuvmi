@@ -97,9 +97,9 @@ export async function createFutureSelf(
   body: {
     title: string;
     description: string;
-    domains: LifeDomain[];
+    domains: string[];
     affirmations: string[];
-    visionItems: Array<{ domain: LifeDomain; title: string; sortOrder: number }>;
+    visionItems: Array<{ domain: string; title: string; sortOrder: number }>;
   },
 ) {
   return apiRequest<FutureSelfResponse>("/api/v1/future-selfs", { token, method: "POST", body });
@@ -107,6 +107,19 @@ export async function createFutureSelf(
 
 export async function fetchFutureSelf(token: string) {
   return apiRequest<FutureSelfResponse>("/api/v1/future-selfs/me", { token });
+}
+
+export async function updateFutureSelf(
+  token: string,
+  body: {
+    title: string;
+    description: string;
+    domains: string[];
+    affirmations: string[];
+    visionItems: Array<{ domain: string; title: string; sortOrder: number }>;
+  },
+) {
+  return apiRequest<FutureSelfResponse>("/api/v1/future-selfs/me", { token, method: "PUT", body });
 }
 
 export async function approveFutureSelf(token: string) {
@@ -126,6 +139,17 @@ export async function createGoal(
 
 export async function fetchActiveGoal(token: string) {
   return apiRequest<GoalResponse>("/api/v1/goals/active", { token });
+}
+
+export async function fetchCurrentGoal(token: string) {
+  return apiRequest<GoalResponse>("/api/v1/goals/current", { token });
+}
+
+export async function updateGoal(
+  token: string,
+  body: { futureSelfId?: string; title: string; description: string; targetDate?: string },
+) {
+  return apiRequest<GoalResponse>("/api/v1/goals/current", { token, method: "PUT", body });
 }
 
 export async function createPlan(

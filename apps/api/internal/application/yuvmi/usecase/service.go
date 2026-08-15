@@ -215,6 +215,36 @@ func (s *Service) GetActiveGoal(ctx context.Context, userID uuid.UUID) (*dto.Goa
 	return toGoalResponse(goal), nil
 }
 
+func (s *Service) GetCurrentGoal(ctx context.Context, userID uuid.UUID) (*dto.GoalResponse, error) {
+	goal, err := s.goals.GetLatestByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return toGoalResponse(goal), nil
+}
+
+func (s *Service) UpdateGoal(ctx context.Context, userID uuid.UUID, req dto.CreateGoalRequest) (*dto.GoalResponse, error) {
+	goal, err := s.goals.GetLatestByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	goal.FutureSelfID = req.FutureSelfID
+	goal.Title = req.Title
+	goal.Description = req.Description
+	goal.TargetDate = nil
+	if req.TargetDate != nil {
+		t, err := dto.ParseDate(*req.TargetDate)
+		if err != nil {
+			return nil, domainErr.New(domainErr.ErrValidation, "invalid targetDate", err)
+		}
+		goal.TargetDate = &t
+	}
+	if err := s.goals.Update(ctx, goal); err != nil {
+		return nil, err
+	}
+	return toGoalResponse(goal), nil
+}
+
 func (s *Service) ActivateGoal(ctx context.Context, userID, goalID uuid.UUID) (*dto.GoalResponse, error) {
 	if err := s.goals.Activate(ctx, userID, goalID); err != nil {
 		return nil, err

@@ -1,3 +1,4 @@
+import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { APP_NAME } from "@yuvmi/shared";
 import { Eyebrow } from "@/components/ui/Glass";
@@ -7,7 +8,7 @@ type PageHeaderProps = {
   title: string;
   subtitle?: string;
   eyebrow?: string;
-  eyebrowRight?: string;
+  eyebrowRight?: string | React.ReactNode;
   showBrand?: boolean;
 };
 
@@ -31,7 +32,13 @@ export function PageHeader({
       {eyebrow || eyebrowRight ? (
         <View style={styles.toprow}>
           <Eyebrow>{eyebrow ?? " "}</Eyebrow>
-          {eyebrowRight ? <Eyebrow>{eyebrowRight}</Eyebrow> : null}
+          {eyebrowRight ? (
+            typeof eyebrowRight === "string" ? (
+              <Eyebrow>{eyebrowRight}</Eyebrow>
+            ) : (
+              eyebrowRight
+            )
+          ) : null}
         </View>
       ) : null}
       <Text style={styles.title}>{title}</Text>

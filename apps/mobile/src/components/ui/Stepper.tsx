@@ -5,13 +5,14 @@ type StepperProps = {
   current: number;
   total: number;
   label?: string;
+  compact?: boolean;
 };
 
-export function Stepper({ current, total, label }: StepperProps) {
+export function Stepper({ current, total, label, compact }: StepperProps) {
   const progress = Math.min(100, Math.round((current / total) * 100));
 
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, compact && styles.wrapCompact]}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
       <View style={styles.track}>
         <View style={[styles.fill, { width: `${progress}%` }]} />
@@ -25,6 +26,7 @@ export function Stepper({ current, total, label }: StepperProps) {
 
 const styles = StyleSheet.create({
   wrap: { marginBottom: theme.space.xl },
+  wrapCompact: { marginBottom: theme.space.sm },
   label: {
     fontSize: theme.font.size.sm,
     color: theme.color.text.secondary,

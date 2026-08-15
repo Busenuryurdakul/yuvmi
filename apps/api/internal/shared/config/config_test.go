@@ -14,7 +14,7 @@ func TestLoad_Defaults(t *testing.T) {
 	assert.Equal(t, 8080, cfg.Server.Port)
 	assert.Equal(t, "localhost", cfg.Database.Host)
 	assert.Equal(t, 5432, cfg.Database.Port)
-	assert.Equal(t, "masterfabric", cfg.Database.User)
+	assert.Equal(t, "yuvmi", cfg.Database.User)
 	assert.Equal(t, "localhost", cfg.Redis.Host)
 	assert.Equal(t, 6379, cfg.Redis.Port)
 	assert.Equal(t, "info", cfg.Log.Level)

@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "main": "expo-router/entry",
   "dependencies": {
-    "@expo-google-fonts/caveat": "^0.4.2",
     "@expo-google-fonts/dm-mono": "^0.4.2",
     "@expo-google-fonts/schibsted-grotesk": "^0.4.2",
     "@expo/metro-runtime": "~57.0.9",

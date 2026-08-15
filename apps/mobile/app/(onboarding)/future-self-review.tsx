@@ -1,12 +1,13 @@
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { Screen } from "@/components/ui/Screen";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Stepper } from "@/components/ui/Stepper";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
+import { domainDisplayLabel } from "@/components/future-self/DomainChipGrid";
 import { useAuth } from "@/context/AuthContext";
 import { approveFutureSelf, fetchFutureSelf } from "@/lib/api/yuvmi";
 import type { FutureSelfResponse } from "@/lib/api/types";
@@ -17,23 +18,56 @@ export default function FutureSelfReviewScreen() {
   const [profile, setProfile] = useState<FutureSelfResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!user?.token) return;
-    fetchFutureSelf(user.token)
-      .then(setProfile)
-      .catch(() => Alert.alert("Hata", "Profil yüklenemedi."))
-      .finally(() => setLoading(false));
+  const loadProfile = useCallback(async () => {
+    if (!user?.token) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await fetchFutureSelf(user.token);
+      if (data.status === "approved") {
+        router.replace("/(onboarding)/goal");
+        return;
+      }
+      setProfile(data);
+    } catch {
+      const message = "Profil yüklenemedi.";
+      setError(message);
+      Alert.alert("Hata", message);
+    } finally {
+      setLoading(false);
+    }
   }, [user?.token]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadProfile();
+    }, [loadProfile]),
+  );
+
+  function handleEdit() {
+    if (profile?.status === "approved") {
+      router.replace("/(onboarding)/goal");
+      return;
+    }
+    router.replace("/(onboarding)/future-self");
+  }
 
   async function handleApprove() {
     if (!user?.token) return;
+    setError(null);
     setSubmitting(true);
     try {
       await approveFutureSelf(user.token);
-      router.push("/(onboarding)/goal");
-    } catch (error) {
-      Alert.alert("Onaylanamadı", error instanceof Error ? error.message : "Bir hata oluştu.");
+      router.replace("/(onboarding)/goal");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Bir hata oluştu.";
+      setError(message);
+      Alert.alert("Onaylanamadı", message);
     } finally {
       setSubmitting(false);
     }
@@ -50,7 +84,7 @@ export default function FutureSelfReviewScreen() {
         <View style={styles.tags}>
           {profile?.domains.map((d) => (
             <Text key={d} style={styles.tag}>
-              {d}
+              {domainDisplayLabel(d)}
             </Text>
           ))}
         </View>
@@ -59,8 +93,9 @@ export default function FutureSelfReviewScreen() {
         ) : null}
       </Card>
       <View style={styles.actions}>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
         <Button label="Onayla ve devam et" loading={submitting} onPress={() => void handleApprove()} />
-        <Button label="Düzenle" variant="secondary" onPress={() => router.back()} />
+        <Button label="Düzenle" variant="secondary" onPress={handleEdit} />
       </View>
     </Screen>
   );
@@ -83,4 +118,9 @@ const styles = StyleSheet.create({
     color: theme.color.text.primary,
   },
   actions: { marginTop: theme.space.xl, gap: theme.space.sm },
+  error: {
+    color: theme.color.danger,
+    fontSize: theme.font.size.sm,
+    lineHeight: 20,
+  },
 });

@@ -8,14 +8,18 @@ import {
   Text,
   TextInput,
   View,
+  Animated,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import { AmbientBackground } from "@/components/ui/Glass";
+import { AmbientBackground, Glass } from "@/components/ui/Glass";
 import { SubpageBar } from "@/components/ui/SubpageBar";
 import { loadBoard, saveBoard, type BoardItem } from "@/lib/local";
 import { theme } from "@/theme";
 
-const STICKERS = ["🌱", "⭐️", "🔥", "🌊", "🕊", "🎯", "💎", "🌙"];
+const STICKER_LIST = [
+  "🐚", "🪸", "⚓️", "🐋", "🐳", "🐬", "🦈", "🪼", "🦀", "🐙", "🐢", "🐠", "🌊", "🫧",
+  "🎯", "⭐", "🔥", "🌙", "🌱", "✨", "💎", "🔮"
+];
 
 function uid() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -25,6 +29,8 @@ export default function VisionBoardScreen() {
   const [items, setItems] = useState<BoardItem[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [draft, setDraft] = useState<{ kind: "note" | "word"; text: string } | null>(null);
+  const [showStickerPicker, setShowStickerPicker] = useState(false);
+  const [stickerEditId, setStickerEditId] = useState<string | null>(null);
   const zRef = useRef(1);
 
   useEffect(() => {
@@ -72,26 +78,42 @@ export default function VisionBoardScreen() {
     <View style={styles.root}>
       <AmbientBackground />
       <SubpageBar title="Vizyon panosu" right="sürükle" />
-      <View style={styles.board} onStartShouldSetResponder={() => true} onResponderGrant={() => setSelected(null)}>
+      
+      {/* Board wrapper view without intercepting touch responders */}
+      <View style={styles.board}>
+        {/* Deselect on clicking empty background */}
+        <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelected(null)} />
+        
+        <DotGrid />
+        
         {items.length === 0 ? (
           <View style={styles.empty} pointerEvents="none">
             <Text style={styles.emptyText}>
-              Panon boş.{"\n"}Aşağıdan fotoğraf, not veya sticker ekle.
+              Panon boş.{"\n"}Aşağıdan fotoğraf, not veya sticker ekle —{"\n"}ya da bir görsel kopyalayıp buraya yapıştır.
+              {"\n\n"}Her öğeye "bu neden burada?" notu ekleyebilirsin.
             </Text>
           </View>
         ) : null}
+
         {items.map((item) => (
           <BoardPiece
             key={item.id}
             item={item}
             selected={selected === item.id}
             onSelect={() => setSelected(item.id)}
+            onEditSticker={(id) => {
+              setStickerEditId(id);
+              setShowStickerPicker(true);
+            }}
             onMove={(x, y) => {
-              setItems((prev) => prev.map((it) => (it.id === item.id ? { ...it, x, y, z: ++zRef.current } : it)));
+              setItems((prev) =>
+                prev.map((it) => (it.id === item.id ? { ...it, x, y, z: ++zRef.current } : it))
+              );
             }}
           />
         ))}
       </View>
+
       {draft ? (
         <View style={styles.prompt}>
           <TextInput
@@ -118,16 +140,90 @@ export default function VisionBoardScreen() {
           </View>
         </View>
       ) : null}
+
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tools} style={styles.toolsWrap}>
         <Tool label="🖼 Fotoğraf" onPress={() => void addPhoto()} />
         <Tool label="📝 Not" onPress={() => setDraft({ kind: "note", text: "" })} />
         <Tool label="💬 Kelime" onPress={() => setDraft({ kind: "word", text: "" })} />
-        <Tool label="✨ Sticker" onPress={() => add({ kind: "sticker", text: STICKERS[Math.floor(Math.random() * STICKERS.length)] })} />
+        <Tool
+          label="✨ Sticker"
+          onPress={() => {
+            setStickerEditId(null);
+            setShowStickerPicker(true);
+          }}
+        />
         <Tool label="🎗 Bant" onPress={() => add({ kind: "tape" })} />
         <Tool label="🗑 Sil" danger onPress={removeSelected} />
       </ScrollView>
+
+      {/* Floating Sticker Picker Overlay Modal */}
+      {showStickerPicker && (
+        <View style={styles.pickerOverlay}>
+          <Glass style={styles.pickerCard}>
+            <Text style={styles.pickerTitle}>
+              {stickerEditId ? "Stickerı Değiştir ✏️" : "Sticker Seçin ✨"}
+            </Text>
+            <View style={styles.pickerGrid}>
+              {STICKER_LIST.map((sticker) => (
+                <Pressable
+                  key={sticker}
+                  style={styles.pickerItem}
+                  onPress={() => {
+                    if (stickerEditId) {
+                      setItems((prev) =>
+                        prev.map((it) => (it.id === stickerEditId ? { ...it, text: sticker } : it))
+                      );
+                    } else {
+                      add({ kind: "sticker", text: sticker });
+                    }
+                    setShowStickerPicker(false);
+                    setStickerEditId(null);
+                  }}
+                >
+                  <Text style={styles.pickerItemText}>{sticker}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Pressable
+              style={styles.pickerCloseBtn}
+              onPress={() => {
+                setShowStickerPicker(false);
+                setStickerEditId(null);
+              }}
+            >
+              <Text style={styles.pickerCloseBtnText}>Vazgeç</Text>
+            </Pressable>
+          </Glass>
+        </View>
+      )}
     </View>
   );
+}
+
+function DotGrid() {
+  const COLS = 20;
+  const ROWS = 35;
+  const SPACING = 17;
+  const dots: React.ReactNode[] = [];
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      dots.push(
+        <View
+          key={`${r}-${c}`}
+          style={{
+            position: "absolute",
+            left: c * SPACING,
+            top: r * SPACING,
+            width: 2,
+            height: 2,
+            borderRadius: 1,
+            backgroundColor: "rgba(11,18,32,0.13)",
+          }}
+        />,
+      );
+    }
+  }
+  return <View style={styles.dotGrid} pointerEvents="none">{dots}</View>;
 }
 
 function Tool({ label, onPress, danger }: { label: string; onPress: () => void; danger?: boolean }) {
@@ -142,11 +238,13 @@ function BoardPiece({
   item,
   selected,
   onSelect,
+  onEditSticker,
   onMove,
 }: {
   item: BoardItem;
   selected: boolean;
   onSelect: () => void;
+  onEditSticker: (id: string) => void;
   onMove: (x: number, y: number) => void;
 }) {
   const start = useRef({ x: item.x, y: item.y });
@@ -154,23 +252,42 @@ function BoardPiece({
   const itemRef = useRef(item);
   moveRef.current = onMove;
   itemRef.current = item;
+
+  // Track position using Animated.ValueXY for smooth 60fps local translation without parent re-render lag
+  const panXY = useRef(new Animated.ValueXY({ x: item.x, y: item.y })).current;
+
+  // Sync animation value if prop values change from outside
+  useEffect(() => {
+    panXY.setValue({ x: item.x, y: item.y });
+  }, [item.x, item.y]);
+
   const pan = useMemo(
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
         onPanResponderGrant: () => {
+          panXY.setOffset({ x: itemRef.current.x, y: itemRef.current.y });
+          panXY.setValue({ x: 0, y: 0 });
           start.current = { x: itemRef.current.x, y: itemRef.current.y };
           onSelect();
         },
-        onPanResponderMove: (_, g) => {
-          moveRef.current(Math.max(-14, start.current.x + g.dx), Math.max(-14, start.current.y + g.dy));
+        onPanResponderMove: Animated.event(
+          [null, { dx: panXY.x, dy: panXY.y }],
+          { useNativeDriver: false }
+        ),
+        onPanResponderRelease: (_, g) => {
+          panXY.flattenOffset();
+          const finalX = Math.max(-14, start.current.x + g.dx);
+          const finalY = Math.max(-14, start.current.y + g.dy);
+          moveRef.current(finalX, finalY);
         },
       }),
     [onSelect],
   );
 
   return (
-    <View
+    <Animated.View
       {...pan.panHandlers}
       style={[
         styles.item,
@@ -180,14 +297,34 @@ function BoardPiece({
         item.kind === "sticker" && styles.sticker,
         item.kind === "tape" && styles.tape,
         selected && styles.sel,
-        { left: item.x, top: item.y, zIndex: item.z, transform: [{ rotate: `${item.rotate}deg` }] },
+        {
+          transform: [
+            { translateX: panXY.x },
+            { translateY: panXY.y },
+            { rotate: `${item.rotate}deg` },
+          ],
+          zIndex: item.z,
+        },
       ]}
     >
       {item.kind === "photo" && item.uri ? <Image source={{ uri: item.uri }} style={styles.img} /> : null}
       {item.kind === "note" ? <Text style={styles.noteText}>{item.text}</Text> : null}
       {item.kind === "word" ? <Text style={styles.wordText}>{item.text}</Text> : null}
       {item.kind === "sticker" ? <Text style={styles.stickerText}>{item.text}</Text> : null}
-    </View>
+
+      {/* Show edit badge on selected stickers */}
+      {item.kind === "sticker" && selected && (
+        <Pressable
+          style={styles.editBadge}
+          onPress={(e) => {
+            e.stopPropagation();
+            onEditSticker(item.id);
+          }}
+        >
+          <Text style={styles.editBadgeText}>✏️</Text>
+        </Pressable>
+      )}
+    </Animated.View>
   );
 }
 
@@ -206,6 +343,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.color.edge,
     zIndex: 2,
+  },
+  dotGrid: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   empty: {
     position: "absolute",
@@ -252,7 +396,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF3B0",
   },
   noteText: {
-    fontFamily: theme.font.hand,
+    fontFamily: theme.font.sans,
     fontSize: 19,
     lineHeight: 24,
     color: "#3A2E10",
@@ -333,5 +477,82 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     justifyContent: "flex-end",
+  },
+  
+  // Custom Styles Added
+  pickerOverlay: {
+    ...StyleSheet.absoluteFill as any,
+    backgroundColor: "rgba(11, 23, 44, 0.4)",
+    zIndex: 999,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  pickerCard: {
+    width: "100%",
+    maxWidth: 320,
+    padding: 20,
+    alignItems: "center",
+    borderRadius: 24,
+    backgroundColor: "rgba(255, 255, 255, 0.85)",
+  },
+  pickerTitle: {
+    fontFamily: theme.font.sansBold,
+    fontSize: 16,
+    color: theme.color.ink,
+    marginBottom: 16,
+  },
+  pickerGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 12,
+    marginBottom: 20,
+  },
+  pickerItem: {
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.6)",
+    borderWidth: 1,
+    borderColor: "rgba(11, 18, 32, 0.06)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  pickerItemText: {
+    fontSize: 24,
+  },
+  pickerCloseBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    backgroundColor: theme.color.blue,
+  },
+  pickerCloseBtnText: {
+    fontFamily: theme.font.sansSemibold,
+    color: "#fff",
+    fontSize: 13,
+  },
+  editBadge: {
+    position: "absolute",
+    top: -8,
+    right: -8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#fff",
+    borderWidth: 1.5,
+    borderColor: theme.color.blue,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 3,
+    zIndex: 10,
+  },
+  editBadgeText: {
+    fontSize: 11,
   },
 });

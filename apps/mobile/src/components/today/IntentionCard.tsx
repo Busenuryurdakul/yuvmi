@@ -7,30 +7,35 @@ export type IntentionState = "full" | "small" | "none";
 type IntentionCardProps = {
   title: string;
   anchor?: string;
+  target?: string;
   protectHint?: string;
   protected?: boolean;
+  lowEnergy?: boolean;
   value?: IntentionState;
   onChange: (value: IntentionState | undefined) => void;
 };
 
 const STATES: Array<{ v: IntentionState; label: string }> = [
   { v: "full", label: "Yaptım" },
-  { v: "small", label: "Küçük hâliyle" },
+  { v: "small", label: "Minimum hâliyle" },
   { v: "none", label: "Olmadı" },
 ];
 
 export function IntentionCard({
   title,
   anchor,
+  target,
   protectHint,
   protected: isProtected,
+  lowEnergy,
   value,
   onChange,
 }: IntentionCardProps) {
   return (
-    <Glass style={[styles.card, value && value !== "none" && styles.done]}>
+    <Glass style={[styles.card, value && styles.done, lowEnergy && styles.lowE]}>
       <Text style={styles.title}>{title}</Text>
       {anchor ? <Text style={styles.anchor}>{anchor}</Text> : null}
+      {target ? <Text style={styles.target}>{target}</Text> : null}
       {isProtected && protectHint ? <Text style={styles.protect}>{protectHint}</Text> : null}
       <View style={styles.states}>
         {(isProtected ? [STATES[1], STATES[0], STATES[2]] : STATES).map((s) => {
@@ -75,6 +80,9 @@ const styles = StyleSheet.create({
   done: {
     opacity: 0.55,
   },
+  lowE: {
+    borderColor: "rgba(37,99,235,0.35)",
+  },
   title: {
     fontFamily: theme.font.sansBold,
     fontSize: 14.5,
@@ -90,6 +98,13 @@ const styles = StyleSheet.create({
     textTransform: "none",
     color: theme.color.ink40,
     marginTop: 4,
+  },
+  target: {
+    marginTop: 6,
+    fontFamily: theme.font.sansSemibold,
+    fontSize: 12.5,
+    fontWeight: theme.font.weight.semibold,
+    color: theme.color.blueDeep,
   },
   protect: {
     marginTop: 9,

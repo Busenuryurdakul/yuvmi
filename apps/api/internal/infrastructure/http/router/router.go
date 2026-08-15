@@ -127,6 +127,8 @@ func New(deps Dependencies) *chi.Mux {
 				r.Route("/goals", func(r chi.Router) {
 					r.Post("/", deps.YuvmiHandler.CreateGoal)
 					r.Get("/active", deps.YuvmiHandler.GetActiveGoal)
+					r.Get("/current", deps.YuvmiHandler.GetCurrentGoal)
+					r.Put("/current", deps.YuvmiHandler.UpdateGoal)
 				})
 
 				r.Route("/plans", func(r chi.Router) {
@@ -214,15 +216,15 @@ func New(deps Dependencies) *chi.Mux {
 				r.Use(middleware.TenantResolverWithWorkspace(deps.OrgRepo, deps.WorkspaceRepo))
 			}
 
-			// WebSocket endpoint (before gateway pipeline — upgrade requests are not HTTP proxy)
-			if deps.RealtimeHandler != nil {
-				r.Get("/ws", deps.RealtimeHandler.Connect)
-			}
-
 			// Gateway pipeline (rate limiting, permission enforcement for managed endpoints)
-			// Must be applied before specific routes so it can handle dynamic endpoints
+			// chi requires all middleware before any routes on the same mux.
 			if deps.GatewayPipeline != nil {
 				r.Use(deps.GatewayPipeline.Enforce)
+			}
+
+			// WebSocket endpoint (upgrade requests are not HTTP proxy)
+			if deps.RealtimeHandler != nil {
+				r.Get("/ws", deps.RealtimeHandler.Connect)
 			}
 
 			// User routes (masterfabric IAM)

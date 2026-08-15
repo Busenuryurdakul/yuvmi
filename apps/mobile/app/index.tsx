@@ -1,4 +1,4 @@
-import { Redirect } from "expo-router";
+import { Redirect, type Href } from "expo-router";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { useAuth } from "@/context/AuthContext";
 
@@ -9,7 +9,7 @@ export default function Index() {
 
   if (!user) return <Redirect href="/(auth)/welcome" />;
 
-  if (!user.onboardingComplete) return <Redirect href="/(onboarding)/future-self" />;
+  if (!user.onboardingComplete) return <Redirect href={"/(onboarding)" as Href} />;
 
-  return <Redirect href="/(tabs)" />;
+  return <Redirect href={"/(tabs)/journey" as Href} />;
 }

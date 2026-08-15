@@ -16,7 +16,8 @@ const (
 	DomainPersonalGrowth  LifeDomain = "personal_growth"
 	DomainCreativity      LifeDomain = "creativity"
 	DomainPeace           LifeDomain = "peace"
-	DomainFreedom         LifeDomain = "freedom"
+	DomainLearning        LifeDomain = "learning"
+	DomainFreedom         LifeDomain = "freedom" // legacy
 )
 
 type FutureSelfStatus string

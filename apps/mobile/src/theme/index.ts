@@ -7,7 +7,9 @@ export const theme = {
     blueLight: "#7BA3F7",
     ink: "#0B1220",
     ink70: "rgba(11,18,32,0.66)",
+    ink50: "rgba(11,18,32,0.50)",
     ink40: "rgba(11,18,32,0.40)",
+    ink30: "rgba(11,18,32,0.30)",
     inkMuted: "rgba(11,18,32,0.40)",
     inkRaised: "#1B2438",
     ink15: "rgba(11,18,32,0.15)",
@@ -63,7 +65,6 @@ export const theme = {
     sansSemibold: "SchibstedGrotesk_600SemiBold",
     sansBold: "SchibstedGrotesk_700Bold",
     sansExtra: "SchibstedGrotesk_800ExtraBold",
-    hand: "Caveat_600SemiBold",
     mono: "DMMono_400Regular",
     monoMedium: "DMMono_500Medium",
     size: {

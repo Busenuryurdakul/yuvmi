@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ApiError } from "@/lib/api/client";
+import { ApiError, setSessionTokenListener } from "@/lib/api/client";
 import {
   fetchMe,
   loginUser,
@@ -111,6 +111,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return next;
     });
   }, []);
+
+  useEffect(() => {
+    setSessionTokenListener((tokens) => {
+      void updateTokens(tokens.token, tokens.refreshToken);
+    });
+    return () => setSessionTokenListener(null);
+  }, [updateTokens]);
 
   useEffect(() => {
     let mounted = true;

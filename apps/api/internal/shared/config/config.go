@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bufio"
 	"fmt"
 	"net/url"
 	"os"
@@ -153,6 +154,7 @@ type LogConfig struct {
 
 // Load reads configuration from environment variables with sensible defaults.
 func Load() *Config {
+	loadEnvFile()
 	return &Config{
 		Server: ServerConfig{
 			Host:               envOrDefault("SERVER_HOST", "0.0.0.0"),
@@ -166,9 +168,9 @@ func Load() *Config {
 		Database: DatabaseConfig{
 			Host:     envOrDefault("DB_HOST", "localhost"),
 			Port:     envOrDefaultInt("DB_PORT", 5432),
-			User:     envOrDefault("DB_USER", "masterfabric"),
-			Password: envOrDefault("DB_PASSWORD", "masterfabric"),
-			DBName:   envOrDefault("DB_NAME", "masterfabric"),
+			User:     envOrDefault("DB_USER", "yuvmi"),
+			Password: envOrDefault("DB_PASSWORD", "yuvmi"),
+			DBName:   envOrDefault("DB_NAME", "yuvmi"),
 			SSLMode:  envOrDefault("DB_SSLMODE", "disable"),
 			MaxConns: envOrDefaultInt32("DB_MAX_CONNS", 25),
 			MinConns: envOrDefaultInt32("DB_MIN_CONNS", 5),
@@ -288,3 +290,32 @@ func envOrDefaultSlice(key string, defaultVal []string) []string {
 	}
 	return defaultVal
 }
+
+func loadEnvFile() {
+	paths := []string{".env", "apps/api/.env", "../../apps/api/.env"}
+	for _, p := range paths {
+		f, err := os.Open(p)
+		if err != nil {
+			continue
+		}
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) == 2 {
+				k := strings.TrimSpace(parts[0])
+				v := strings.TrimSpace(parts[1])
+				v = strings.Trim(v, `"'`)
+				if _, exists := os.LookupEnv(k); !exists {
+					_ = os.Setenv(k, v)
+				}
+			}
+		}
+		_ = f.Close()
+		break
+	}
+}
+

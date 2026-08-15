@@ -10,27 +10,32 @@ type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>["tabBar"]>
 
 const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   index: "sunny-outline",
-  "future-self": "sparkles-outline",
   journey: "map-outline",
-  spaces: "people-outline",
+  yuvmi: "sparkles-outline",
+  atolye: "grid-outline",
   profile: "person-outline",
 };
 
 const LABELS: Record<string, string> = {
   index: "Bugün",
-  "future-self": "Vizyon",
   journey: "Yolculuk",
-  spaces: "Alanlar",
+  yuvmi: "Yuvmi",
+  atolye: "Atölye",
   profile: "Profil",
 };
 
-export function GlassTabBar({ state, navigation }: TabBarProps) {
+export function GlassTabBar({ state, descriptors, navigation }: TabBarProps) {
   const insets = useSafeAreaInsets();
+  const visibleRoutes = state.routes.filter((route) => {
+    const opts = descriptors[route.key]?.options as { href?: string | null } | undefined;
+    return opts?.href !== null;
+  });
 
   return (
-    <View style={[styles.wrap, { bottom: Math.max(insets.bottom, 10) + 4 }]} pointerEvents="box-none">
+    <View style={[styles.wrap, { bottom: 0 }]} pointerEvents="box-none">
       <BlurView intensity={48} tint="light" experimentalBlurMethod="dimezisBlurView" style={styles.nav}>
-        {state.routes.map((route, index) => {
+        {visibleRoutes.map((route) => {
+          const index = state.routes.findIndex((r) => r.key === route.key);
           const focused = state.index === index;
           const onPress = () => {
             const event = navigation.emit({
@@ -61,6 +66,11 @@ export function GlassTabBar({ state, navigation }: TabBarProps) {
           );
         })}
       </BlurView>
+      {insets.bottom > 0 ? (
+        <View style={{ height: insets.bottom + 4, backgroundColor: theme.color.mist }} />
+      ) : (
+        <View style={{ height: 10 }} />
+      )}
     </View>
   );
 }
@@ -68,11 +78,14 @@ export function GlassTabBar({ state, navigation }: TabBarProps) {
 const styles = StyleSheet.create({
   wrap: {
     position: "absolute",
-    left: 14,
-    right: 14,
+    left: 0,
+    right: 0,
+    zIndex: 999,
   },
   nav: {
     flexDirection: "row",
+    marginHorizontal: 14,
+    marginBottom: 4,
     paddingVertical: 8,
     paddingHorizontal: 5,
     borderRadius: theme.radius.nav,

@@ -39,6 +39,27 @@ func (r *GoalRepo) GetActiveByUserID(ctx context.Context, userID uuid.UUID) (*mo
 		FROM goals WHERE user_id=$1 AND status='active' ORDER BY created_at DESC LIMIT 1`, userID))
 }
 
+func (r *GoalRepo) GetLatestByUserID(ctx context.Context, userID uuid.UUID) (*model.Goal, error) {
+	return r.scanGoal(r.db.QueryRow(ctx, `
+		SELECT id, user_id, future_self_id, title, description, target_date, status, created_at, updated_at
+		FROM goals WHERE user_id=$1 AND status != 'archived' ORDER BY updated_at DESC, created_at DESC LIMIT 1`, userID))
+}
+
+func (r *GoalRepo) Update(ctx context.Context, goal *model.Goal) error {
+	goal.UpdatedAt = time.Now().UTC()
+	tag, err := r.db.Exec(ctx, `
+		UPDATE goals SET future_self_id=$1, title=$2, description=$3, target_date=$4, updated_at=$5
+		WHERE id=$6 AND user_id=$7 AND status != 'archived'`,
+		goal.FutureSelfID, goal.Title, goal.Description, goal.TargetDate, goal.UpdatedAt, goal.ID, goal.UserID)
+	if err != nil {
+		return domainErr.New(domainErr.ErrInternal, "failed to update goal", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domainErr.New(domainErr.ErrNotFound, "goal not found", nil)
+	}
+	return nil
+}
+
 func (r *GoalRepo) GetByID(ctx context.Context, userID, goalID uuid.UUID) (*model.Goal, error) {
 	return r.scanGoal(r.db.QueryRow(ctx, `
 		SELECT id, user_id, future_self_id, title, description, target_date, status, created_at, updated_at

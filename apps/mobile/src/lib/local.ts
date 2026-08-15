@@ -45,12 +45,36 @@ export type ExtraAffirmation = {
   who: string;
 };
 
+export type UserMode = "soft" | "hard";
+export type EnergyLevel = "lo" | "mid" | "hi";
+
 export type AppPrefs = {
   quietWeek: boolean;
   darkMode: boolean;
   appLock: boolean;
   morningReminder: string;
   eveningReminder: string;
+  mode: UserMode;
+  energy: EnergyLevel;
+  tohum: number;
+  survivalMode: boolean;
+};
+
+export type RitualDraft = {
+  id: string;
+  name: string;
+  blocks: string[];
+};
+
+export type DeckCard = {
+  id: string;
+  text: string;
+};
+
+export type WaveItem = {
+  id: string;
+  name: string;
+  count: number;
 };
 
 const KEYS = {
@@ -62,6 +86,10 @@ const KEYS = {
   aff: "yuvmi.extra-affirmations",
   prefs: "yuvmi.prefs",
   extraDomains: "yuvmi.extra-domains",
+  rituals: "yuvmi.rituals",
+  deck: "yuvmi.deck",
+  waves: "yuvmi.waves",
+  dailyCard: "yuvmi.daily-card",
 };
 
 export async function loadMoodHistory(): Promise<Record<string, MoodLevel>> {
@@ -123,17 +151,62 @@ export async function saveExtraAffirmations(items: ExtraAffirmation[]) {
 }
 
 export async function loadPrefs(): Promise<AppPrefs> {
-  return readJson(KEYS.prefs, {
-    quietWeek: false,
-    darkMode: false,
-    appLock: true,
-    morningReminder: "08:00",
-    eveningReminder: "21:30",
-  });
+  const raw = await readJson<Partial<AppPrefs>>(KEYS.prefs, {});
+  return {
+    quietWeek: Boolean(raw.quietWeek),
+    darkMode: Boolean(raw.darkMode),
+    appLock: raw.appLock ?? true,
+    morningReminder: raw.morningReminder ?? "08:00",
+    eveningReminder: raw.eveningReminder ?? "21:30",
+    mode: raw.mode === "hard" ? "hard" : "soft",
+    energy: raw.energy === "lo" || raw.energy === "hi" ? raw.energy : "mid",
+    tohum: typeof raw.tohum === "number" ? raw.tohum : 48,
+    survivalMode: Boolean(raw.survivalMode),
+  };
 }
 
 export async function savePrefs(prefs: AppPrefs) {
   await writeJson(KEYS.prefs, prefs);
+}
+
+export async function loadRituals(): Promise<RitualDraft[]> {
+  return readJson(KEYS.rituals, []);
+}
+
+export async function saveRituals(items: RitualDraft[]) {
+  await writeJson(KEYS.rituals, items);
+}
+
+export async function loadDeck(): Promise<DeckCard[]> {
+  return readJson(KEYS.deck, [
+    { id: "1", text: "Bugün kendine karşı nazik ol." },
+    { id: "2", text: "Minimum hâli de sayılır." },
+    { id: "3", text: "Bir adım yeter." },
+    { id: "4", text: "Dönmek de ilerlemektir." },
+  ]);
+}
+
+export async function saveDeck(items: DeckCard[]) {
+  await writeJson(KEYS.deck, items);
+}
+
+export async function loadWaves(): Promise<WaveItem[]> {
+  return readJson(KEYS.waves, [
+    { id: "w1", name: "Sosyal medya scroll", count: 0 },
+    { id: "w2", name: "Şeker", count: 0 },
+  ]);
+}
+
+export async function saveWaves(items: WaveItem[]) {
+  await writeJson(KEYS.waves, items);
+}
+
+export async function loadDailyCard(): Promise<{ date: string; text: string } | null> {
+  return readJson(KEYS.dailyCard, null);
+}
+
+export async function saveDailyCard(card: { date: string; text: string }) {
+  await writeJson(KEYS.dailyCard, card);
 }
 
 export async function loadExtraDomains(): Promise<string[]> {

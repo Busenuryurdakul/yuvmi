@@ -1,5 +1,6 @@
 import { getApiBaseUrl } from "./config";
 import { refreshAuthToken } from "./yuvmi";
+import { loadStoredSession, persistSession } from "@/lib/auth/session";
 
 export class ApiError extends Error {
   code: number;
@@ -17,6 +18,14 @@ type RequestOptions = {
   body?: unknown;
   onTokenRefreshed?: (tokens: { token: string; refreshToken: string }) => void;
 };
+
+type TokenPair = { token: string; refreshToken: string };
+
+let onSessionTokensRefreshed: ((tokens: TokenPair) => void) | null = null;
+
+export function setSessionTokenListener(listener: ((tokens: TokenPair) => void) | null) {
+  onSessionTokensRefreshed = listener;
+}
 
 function parseApiError(payload: Record<string, unknown>, status: number): ApiError {
   const nested = payload.error;
@@ -37,6 +46,21 @@ function parseApiError(payload: Record<string, unknown>, status: number): ApiErr
   }
 
   return new ApiError(`İstek başarısız (${status})`, status);
+}
+
+async function resolveRefreshToken(explicit?: string | null): Promise<string | null> {
+  if (explicit) return explicit;
+  const session = await loadStoredSession();
+  return session?.refreshToken ?? null;
+}
+
+async function persistRefreshedTokens(tokens: TokenPair, notify?: RequestOptions["onTokenRefreshed"]) {
+  const session = await loadStoredSession();
+  if (session) {
+    await persistSession({ ...session, token: tokens.token, refreshToken: tokens.refreshToken });
+  }
+  notify?.(tokens);
+  onSessionTokensRefreshed?.(tokens);
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -74,24 +98,26 @@ async function requestWithRefresh<T>(
   const text = await response.text();
   const payload = text ? (JSON.parse(text) as Record<string, unknown>) : {};
 
-  if (response.status === 401 && !retried && options.refreshToken) {
-    try {
-      const refreshed = await refreshAuthToken(options.refreshToken);
-      options.onTokenRefreshed?.({
-        token: refreshed.token,
-        refreshToken: refreshed.refresh_token,
-      });
-      return requestWithRefresh(
-        path,
-        {
-          ...options,
-          token: refreshed.token,
-          refreshToken: refreshed.refresh_token,
-        },
-        true,
-      );
-    } catch {
-      // fall through to error handling
+  const canRefresh = response.status === 401 && !retried && !path.includes("/auth/refresh");
+  if (canRefresh) {
+    const refreshToken = await resolveRefreshToken(options.refreshToken);
+    if (refreshToken) {
+      try {
+        const refreshed = await refreshAuthToken(refreshToken);
+        const tokens = { token: refreshed.token, refreshToken: refreshed.refresh_token };
+        await persistRefreshedTokens(tokens, options.onTokenRefreshed);
+        return requestWithRefresh(
+          path,
+          {
+            ...options,
+            token: tokens.token,
+            refreshToken: tokens.refreshToken,
+          },
+          true,
+        );
+      } catch {
+        // fall through to error handling
+      }
     }
   }
 
@@ -122,10 +148,14 @@ export async function apiUpload<T>(
     body: formData,
   });
 
-  if (response.status === 401 && refreshToken) {
-    const refreshed = await refreshAuthToken(refreshToken);
-    onTokenRefreshed?.({ token: refreshed.token, refreshToken: refreshed.refresh_token });
-    return apiUpload(path, refreshed.token, formData, refreshed.refresh_token, onTokenRefreshed);
+  if (response.status === 401) {
+    const sessionRefresh = await resolveRefreshToken(refreshToken);
+    if (sessionRefresh) {
+      const refreshed = await refreshAuthToken(sessionRefresh);
+      const tokens = { token: refreshed.token, refreshToken: refreshed.refresh_token };
+      await persistRefreshedTokens(tokens, onTokenRefreshed);
+      return apiUpload(path, refreshed.token, formData, refreshed.refresh_token, onTokenRefreshed);
+    }
   }
 
   const text = await response.text();

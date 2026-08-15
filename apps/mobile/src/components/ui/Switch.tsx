@@ -3,15 +3,28 @@ import { theme } from "@/theme";
 
 type SwitchProps = {
   value: boolean;
-  onChange: (next: boolean) => void;
+  onChange?: (next: boolean) => void;
+  onValueChange?: (next: boolean) => void;
+  disabled?: boolean;
+  trackColor?: { false?: string; true?: string };
+  thumbColor?: string;
+  ios_backgroundColor?: string;
 };
 
-export function Switch({ value, onChange }: SwitchProps) {
+export function Switch({ value, onChange, onValueChange, disabled }: SwitchProps) {
+  const handleToggle = () => {
+    if (disabled) return;
+    const next = !value;
+    onChange?.(next);
+    onValueChange?.(next);
+  };
+
   return (
     <Pressable
       accessibilityRole="switch"
-      accessibilityState={{ checked: value }}
-      onPress={() => onChange(!value)}
+      accessibilityState={{ checked: value, disabled: Boolean(disabled) }}
+      onPress={handleToggle}
+      disabled={disabled}
       style={[styles.track, value && styles.trackOn]}
     >
       <View style={[styles.thumb, value && styles.thumbOn]} />
