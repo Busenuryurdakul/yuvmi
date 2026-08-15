@@ -2,8 +2,8 @@
 
 Bu doküman Yuvmi'nin **2 geliştirici** ile nasıl branch ve PR yöneteceğini tanımlar.
 
-> Repo sahibi: [`Busenuryurdakul/yumvi`](https://github.com/Busenuryurdakul/yumvi)  
-> İkinci geliştirici: GitHub'da **Collaborator** olarak eklenmeli (Settings → Collaborators).
+> Repo sahibi: [`Busenuryurdakul`](https://github.com/Busenuryurdakul) — Buse Nur Yurdakul  
+> Proje arkadaşı: [`ayse-solmaz`](https://github.com/ayse-solmaz) — Ayşe Solmaz
 
 ---
 
@@ -23,7 +23,7 @@ main          ← her zaman çalışır durumda; doğrudan push yok
 | `feat/<kısa-ad>-<konu>` | Yeni özellik veya faz işi |
 | `fix/<kısa-ad>-<konu>` | Bugfix |
 | `docs/<kısa-ad>-<konu>` | PRODUCT, ARCHITECTURE, README vb. |
-| `chore/<konu>` | Lint, CI, turbo, git hooks |
+| `chore/<kısa-ad>-<konu>` | Lint, CI, turbo, git hooks |
 
 **`develop` branch'i kullanmıyoruz** — iki kişilik ekipte gereksiz karmaşıklık. Her şey `main`'e PR ile gider.
 
@@ -37,20 +37,20 @@ Format:
 <tür>/<geliştirici-kısa-adı>-<konu>
 ```
 
-| Geliştirici | Kısa ad (öneri) | Alanlar |
-|-------------|-----------------|---------|
-| Repo sahibi | `busenur` | *(GitHub kullanıcı adına göre güncelle)* |
-| Proje arkadaşı | `partner` | *(kendi kısa adını seç — örn. `ahmet`)* |
+| Geliştirici | Kısa ad | GitHub | Alanlar |
+|-------------|---------|--------|---------|
+| Buse Nur | `busenur` | `@Busenuryurdakul` | Web, backend (Phase 1) |
+| Ayşe Solmaz | `ayse` | `@ayse-solmaz` | Mobil, shared review |
 
 ### Örnekler
 
 ```
 feat/busenur-foundation-hardening   ← Phase 0 işi
-feat/partner-mobile-onboarding      ← mobil onboarding
+feat/ayse-mobile-onboarding         ← mobil onboarding
 feat/busenur-api-scaffold           ← Go API iskeleti
-fix/partner-alignment-score         ← hizalanma bugfix
+fix/ayse-alignment-score            ← hizalanma bugfix
 docs/busenur-collaboration          ← bu doküman
-chore/partner-ci-setup              ← GitHub Actions
+chore/ayse-ci-setup                 ← GitHub Actions
 ```
 
 **Kurallar:**
@@ -64,8 +64,8 @@ chore/partner-ci-setup              ← GitHub Actions
 
 | Alan | Dizin | Birincil sorumlu (örnek) |
 |------|-------|--------------------------|
-| Web | `apps/web/` | Geliştirici A |
-| Mobil | `apps/mobile/` | Geliştirici B |
+| Web | `apps/web/` | Buse (`busenur`) |
+| Mobil | `apps/mobile/` | Ayşe (`ayse`) |
 | Shared tipler | `packages/shared/` | **İkisi de** — PR zorunlu, küçük PR |
 | Backend (Go) | `apps/api/` *(henüz yok)* | Geliştirici A veya B — Phase 1'de netleştir |
 | Ürün / mimari | `docs/` | **İkisi de** — kararları PR açıklamasında yaz |
@@ -86,7 +86,7 @@ git pull origin main
 ### 2. Yeni iş için branch
 
 ```bash
-git checkout -b feat/partner-mobile-onboarding
+git checkout -b feat/ayse-mobile-onboarding
 ```
 
 ### 3. Commit
@@ -112,7 +112,7 @@ Türler: `feat`, `fix`, `docs`, `chore`, `refactor`, `test`
 ### 4. Push ve PR
 
 ```bash
-git push -u origin feat/partner-mobile-onboarding
+git push -u origin feat/ayse-mobile-onboarding
 gh pr create --base main --title "feat(mobile): onboarding shell" --body "..."
 ```
 
@@ -120,14 +120,14 @@ gh pr create --base main --title "feat(mobile): onboarding shell" --body "..."
 
 - Her PR'da **en az 1 onay** (diğer geliştirici)
 - Kendi PR'ını kendin merge etme — karşı taraf onaylasın
-- CI yeşil olmadan merge yok *(CI kurulunca)*
+- CI yeşil olmadan merge yok
 
 ### 6. Merge sonrası
 
 ```bash
 git checkout main
 git pull origin main
-git branch -d feat/partner-mobile-onboarding   # yerel temizlik
+git branch -d feat/ayse-mobile-onboarding   # yerel temizlik
 ```
 
 ---
@@ -147,39 +147,15 @@ PR şablonu: [`.github/pull_request_template.md`](../.github/pull_request_templa
 
 ---
 
-## İlk kurulum (repo henüz commit'siz)
-
-Repo şu an **commit içermiyor**. İlk bootstrap önerisi:
-
-### Adım 1 — İlk commit (repo sahibi)
+## İlk yerel kurulum
 
 ```bash
-git checkout main
-git add .
-git commit -m "chore: initial Yuvmi monorepo scaffold"
-git push -u origin main
-```
-
-### Adım 2 — Phase 0 PR (mevcut iş)
-
-Foundation hardening ayrı PR olarak gitsin:
-
-```bash
-git checkout -b feat/busenur-foundation-hardening
-# ... Phase 0 değişiklikleri zaten bu branch'te
-git add .
-git commit -m "docs: Phase 0 foundation hardening"
-git push -u origin feat/busenur-foundation-hardening
-gh pr create --base main --title "Phase 0: Foundation hardening"
-```
-
-### Adım 3 — Proje arkadaşı
-
-```bash
-git clone https://github.com/Busenuryurdakul/yumvi.git
-cd yumvi   # veya yuvmi — klasör adı
-npm install
-git checkout -b feat/partner-<ilk-is>
+git clone https://github.com/Busenuryurdakul/yuvmi.git
+cd yuvmi
+npm ci
+git switch main
+git pull origin main
+git switch -c feat/ayse-<ilk-is>
 ```
 
 ---
@@ -190,25 +166,20 @@ Settings → Branches → **Branch protection rule** (`main`):
 
 - [x] Require a pull request before merging
 - [x] Require approvals: **1**
-- [ ] Require status checks *(CI eklenince aç)*
+- [x] Require status checks: `quality`
 - [x] Do not allow bypassing the above settings
 
 Settings → Collaborators → proje arkadaşını **Write** veya **Maintain** olarak ekle.
 
 ---
 
-## Mevcut branch durumu
+## Repo ayarı kontrol listesi
 
-| Branch | Durum | Öneri |
-|--------|-------|-------|
-| `main` | Commit yok | İlk scaffold commit'i buraya veya squash merge ile |
-| `feat/yuvmi-foundation-hardening` | Commit yok, Phase 0 değişiklikleri | → `feat/busenur-foundation-hardening` olarak yeniden adlandır ve PR aç |
-
-Branch yeniden adlandırma:
-
-```bash
-git branch -m feat/busenur-foundation-hardening
-```
+- Varsayılan branch `main` olmalı.
+- `main` için branch protection etkin olmalı.
+- Doğrudan push kapalı, en az 1 karşı taraf onayı zorunlu olmalı.
+- Zorunlu durum kontrolü olarak `quality` seçilmeli.
+- Merge yöntemi olarak squash merge tercih edilmeli.
 
 ---
 
@@ -233,4 +204,4 @@ gh pr list
 
 ---
 
-*Proje arkadaşının GitHub kullanıcı adını ve kısa branch adını netleştirdikten sonra bu dosyadaki `partner` placeholder'larını güncelle.*
+*Bu doküman ekip veya GitHub ayarları değiştiğinde aynı PR içinde güncellenir.*

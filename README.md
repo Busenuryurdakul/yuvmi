@@ -30,9 +30,11 @@ Branch adlandırma, PR kuralları ve review süreci için [`docs/COLLABORATION.m
 
 ## Başlangıç
 
+Gereksinim: Node.js 20 veya üzeri.
+
 ```bash
 # Bağımlılıkları yükle
-npm install
+npm ci
 
 # Web geliştirme sunucusu
 npm run dev:web
