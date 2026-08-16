@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/masterfabric-go/masterfabric/internal/shared/config"
@@ -38,6 +39,24 @@ func WaitlistRateLimit(redisClient *redis.Client, cfg config.WaitlistConfig, log
 				return
 			}
 
+			clientIP, err := ResolveClientIP(r, cfg)
+			if err != nil || clientIP == "" {
+				if logger != nil {
+					logger.Warn("waitlist client ip unavailable")
+				}
+				failClosed := cfg.IsProduction || strings.EqualFold(cfg.ClientIPMode, config.ClientIPModeRender)
+				if failClosed {
+					response.JSON(w, http.StatusServiceUnavailable, map[string]string{
+						"error":   http.StatusText(http.StatusServiceUnavailable),
+						"message": "service temporarily unavailable",
+						"code":    "503",
+					})
+					return
+				}
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			if redisClient == nil {
 				if cfg.IsProduction {
 					response.JSON(w, http.StatusServiceUnavailable, map[string]string{
@@ -50,12 +69,6 @@ func WaitlistRateLimit(redisClient *redis.Client, cfg config.WaitlistConfig, log
 				if logger != nil {
 					logger.Warn("waitlist rate limit skipped: redis unavailable")
 				}
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			clientIP := ResolveClientIP(r, cfg.TrustedProxyCIDRs)
-			if clientIP == "" {
 				next.ServeHTTP(w, r)
 				return
 			}

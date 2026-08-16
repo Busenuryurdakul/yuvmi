@@ -19,6 +19,18 @@ make run
 
 Default: `http://localhost:8080`
 
+## Public waitlist / reverse proxy
+
+Client IP for waitlist rate limiting is selected with `WAITLIST_CLIENT_IP_MODE`:
+
+| Mode | Behavior |
+|------|----------|
+| `direct` (default) | TCP peer only. `X-Forwarded-For` and `CF-Connecting-IP` are ignored. |
+| `trusted_cidrs` | `X-Forwarded-For` is used only when the peer is in `WAITLIST_TRUSTED_PROXY_CIDRS`. |
+| `render` | Render web service: a single `CF-Connecting-IP` value. Requires `RENDER_SERVICE_ID` and `RENDER_SERVICE_TYPE=web`. |
+
+Production CORS origins come from `CORS_ALLOWED_ORIGINS` (exact `https://host[:port]` allowlist, no wildcards). Set the Vercel origin in the Render Dashboard; do not commit it.
+
 ## Yuvmi MVP endpoints
 
 See Phase 1 routes under `/api/v1/` — auth via masterfabric IAM, product routes via Yuvmi handler.
