@@ -1,6 +1,7 @@
 package middleware_test
 
 import (
+	"bytes"
 	"context"
 	"log/slog"
 	"net/http"
@@ -171,6 +172,42 @@ func TestWaitlistRateLimit_ThresholdAndRetryAfter(t *testing.T) {
 	assert.Equal(t, http.StatusTooManyRequests, rec.Code)
 	assert.NotEmpty(t, rec.Header().Get("Retry-After"))
 	assert.NotContains(t, rec.Body.String(), "@")
+}
+
+func TestWaitlistRateLimit_RenderMissingHeaderFailClosedNoRawIP(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		t.Fatal("next handler must not run")
+	})
+
+	cfg := prodWaitlistConfig()
+	cfg.ClientIPMode = config.ClientIPModeRender
+	cfg.RenderServiceID = "srv-example"
+	cfg.RenderServiceType = "web"
+
+	handler := middleware.WaitlistRateLimit(nil, cfg, logger)(next)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/public/waitlist", nil)
+	req.RemoteAddr = "10.0.0.8:12345"
+	req.Header.Set("X-Forwarded-For", "198.51.100.77")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	assert.NotContains(t, rec.Body.String(), "198.51.100.77")
+	assert.NotContains(t, rec.Body.String(), "10.0.0.8")
+	assert.NotContains(t, buf.String(), "198.51.100.77")
+	assert.NotContains(t, buf.String(), "10.0.0.8")
+	assert.NotContains(t, middleware.WaitlistRateLimitRedisKeyForTest(testHashKey, "198.51.100.77"), "198.51.100.77")
+}
+
+func TestWaitlistRateLimit_RenderValidIPDoesNotEmbedRawIPInKey(t *testing.T) {
+	rawIP := "198.51.100.20"
+	key := middleware.WaitlistRateLimitRedisKeyForTest(testHashKey, rawIP)
+	assert.NotContains(t, key, rawIP)
+	assert.True(t, strings.HasPrefix(key, middleware.WaitlistRateLimitKeyPrefixForTest()))
 }
 
 func TestWaitlistRateLimit_TTLSetOnFirstIncrement(t *testing.T) {
