@@ -26,10 +26,16 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.signupUC.Execute(r.Context(), req); err != nil {
+	result, err := h.signupUC.Execute(r.Context(), req)
+	if err != nil {
 		response.Error(w, err)
 		return
 	}
 
-	response.JSON(w, http.StatusOK, usecase.AcceptedResponse())
+	status := http.StatusOK
+	if result.Created {
+		status = http.StatusCreated
+	}
+
+	response.JSON(w, status, usecase.AcceptedResponse())
 }

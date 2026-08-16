@@ -34,12 +34,13 @@ func TestSignupUseCase_PersistsNormalizedEmail(t *testing.T) {
 	repo := &mockSignupRepo{result: waitlistRepo.RegisterResult{Created: true}}
 	uc := usecase.NewSignupUseCase(repo, testWaitlistConfig())
 
-	err := uc.Execute(context.Background(), dto.SignupRequest{
+	result, err := uc.Execute(context.Background(), dto.SignupRequest{
 		Email:   "user@example.com",
 		Consent: true,
 	})
 
 	require.NoError(t, err)
+	assert.True(t, result.Created)
 	require.NotNil(t, repo.last)
 	assert.Equal(t, "user@example.com", repo.last.EmailNormalized)
 	assert.Equal(t, model.SourceWebLanding, repo.last.Source)
@@ -52,19 +53,20 @@ func TestSignupUseCase_DuplicateIsSuccess(t *testing.T) {
 	repo := &mockSignupRepo{result: waitlistRepo.RegisterResult{Created: false}}
 	uc := usecase.NewSignupUseCase(repo, testWaitlistConfig())
 
-	err := uc.Execute(context.Background(), dto.SignupRequest{
+	result, err := uc.Execute(context.Background(), dto.SignupRequest{
 		Email:   "user@example.com",
 		Consent: true,
 	})
 
 	require.NoError(t, err)
+	assert.False(t, result.Created)
 }
 
 func TestSignupUseCase_RepositoryError(t *testing.T) {
 	repo := &mockSignupRepo{err: domainErr.New(domainErr.ErrInternal, "db down", nil)}
 	uc := usecase.NewSignupUseCase(repo, testWaitlistConfig())
 
-	err := uc.Execute(context.Background(), dto.SignupRequest{
+	_, err := uc.Execute(context.Background(), dto.SignupRequest{
 		Email:   "user@example.com",
 		Consent: true,
 	})

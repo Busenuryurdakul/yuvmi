@@ -61,7 +61,7 @@ func TestWaitlistRoute_PublicNoJWT(t *testing.T) {
 
 	r.ServeHTTP(rec, req)
 
-	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, http.StatusCreated, rec.Code)
 	assert.Contains(t, rec.Body.String(), `"status":"`+dto.SignupStatusAccepted+`"`)
 }
 
