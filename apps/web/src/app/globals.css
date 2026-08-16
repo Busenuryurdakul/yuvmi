@@ -626,20 +626,18 @@ body {
 }
 
 .landing-waitlist-form {
+  width: 100%;
+}
+
+.landing-waitlist-fields {
   display: flex;
+  width: 100%;
   flex-direction: column;
   gap: 0.75rem;
 }
 
-@media (min-width: 640px) {
-  .landing-waitlist-form {
-    flex-direction: row;
-    align-items: stretch;
-  }
-}
-
 .landing-waitlist-input {
-  flex: 1;
+  width: 100%;
   min-width: 0;
 }
 

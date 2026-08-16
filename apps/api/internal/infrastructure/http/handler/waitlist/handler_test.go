@@ -54,20 +54,20 @@ func decodeSignupResponse(t *testing.T, rec *httptest.ResponseRecorder) dto.Sign
 	return payload
 }
 
-func assertUniformAccepted(t *testing.T, rec *httptest.ResponseRecorder) {
+func assertUniformAccepted(t *testing.T, rec *httptest.ResponseRecorder, wantStatus int) {
 	t.Helper()
-	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, wantStatus, rec.Code)
 	payload := decodeSignupResponse(t, rec)
 	assert.Equal(t, dto.SignupStatusAccepted, payload.Status)
 	assert.Equal(t, dto.SignupSuccessMessage, payload.Message)
 }
 
-func TestHandler_ValidRequestReturns200Accepted(t *testing.T) {
+func TestHandler_ValidRequestReturns201Created(t *testing.T) {
 	h := newHandler(&handlerMockRepo{result: waitlistRepo.RegisterResult{Created: true}})
 
 	rec := postSignup(t, h.Signup, `{"email":"user@example.com","consent":true}`, "")
 
-	assertUniformAccepted(t, rec)
+	assertUniformAccepted(t, rec, http.StatusCreated)
 	assert.NotContains(t, rec.Body.String(), "user@example.com")
 }
 
@@ -94,7 +94,7 @@ func TestHandler_TrimsEmailBeforeValidation(t *testing.T) {
 
 	rec := postSignup(t, h.Signup, `{"email":"  user@example.com  ","consent":true}`, "")
 
-	assertUniformAccepted(t, rec)
+	assertUniformAccepted(t, rec, http.StatusOK)
 }
 
 func TestHandler_MalformedJSON(t *testing.T) {
@@ -111,7 +111,7 @@ func TestHandler_NoAuthorizationAccessible(t *testing.T) {
 
 	rec := postSignup(t, h.Signup, `{"email":"user@example.com","consent":true}`, "")
 
-	assertUniformAccepted(t, rec)
+	assertUniformAccepted(t, rec, http.StatusCreated)
 }
 
 func TestHandler_DuplicateReturnsSame200Accepted(t *testing.T) {
@@ -119,7 +119,16 @@ func TestHandler_DuplicateReturnsSame200Accepted(t *testing.T) {
 
 	rec := postSignup(t, h.Signup, `{"email":"user@example.com","consent":true}`, "")
 
-	assertUniformAccepted(t, rec)
+	assertUniformAccepted(t, rec, http.StatusOK)
+}
+
+func TestHandler_DuplicateBodyMatchesCreated(t *testing.T) {
+	created := postSignup(t, newHandler(&handlerMockRepo{result: waitlistRepo.RegisterResult{Created: true}}).Signup, `{"email":"user@example.com","consent":true}`, "")
+	duplicate := postSignup(t, newHandler(&handlerMockRepo{result: waitlistRepo.RegisterResult{Created: false}}).Signup, `{"email":"user@example.com","consent":true}`, "")
+
+	assert.Equal(t, http.StatusCreated, created.Code)
+	assert.Equal(t, http.StatusOK, duplicate.Code)
+	assert.Equal(t, created.Body.String(), duplicate.Body.String())
 }
 
 func TestHandler_ResponseDoesNotExposeEmailOrID(t *testing.T) {

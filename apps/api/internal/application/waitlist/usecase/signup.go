@@ -22,7 +22,7 @@ func NewSignupUseCase(repo waitlistRepo.SignupRepository, cfg config.WaitlistCon
 }
 
 // Execute validates and registers a waitlist signup.
-func (uc *SignupUseCase) Execute(ctx context.Context, req dto.SignupRequest) error {
+func (uc *SignupUseCase) Execute(ctx context.Context, req dto.SignupRequest) (waitlistRepo.RegisterResult, error) {
 	now := time.Now().UTC()
 
 	signup := &model.Signup{
@@ -33,8 +33,11 @@ func (uc *SignupUseCase) Execute(ctx context.Context, req dto.SignupRequest) err
 		PrivacyPolicyVersion: uc.cfg.PrivacyPolicyVersion,
 	}
 
-	_, err := uc.repo.Register(ctx, signup)
-	return err
+	result, err := uc.repo.Register(ctx, signup)
+	if err != nil {
+		return waitlistRepo.RegisterResult{}, err
+	}
+	return result, nil
 }
 
 // AcceptedResponse returns the uniform success payload.
