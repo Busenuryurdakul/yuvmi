@@ -21,6 +21,7 @@ type Config struct {
 	Cron      CronConfig
 	Kafka     KafkaConfig
 	WebSocket WebSocketConfig
+	Waitlist  WaitlistConfig
 	Log       LogConfig
 }
 
@@ -231,6 +232,7 @@ func Load() *Config {
 			ReadBufferSize:  envOrDefaultInt("WS_READ_BUFFER_SIZE", 1024),
 			WriteBufferSize: envOrDefaultInt("WS_WRITE_BUFFER_SIZE", 1024),
 		},
+		Waitlist: loadWaitlistConfig(),
 		Log: LogConfig{
 			Level:  envOrDefault("LOG_LEVEL", "info"),
 			Format: envOrDefault("LOG_FORMAT", "json"),

@@ -22,11 +22,11 @@ import (
 	tenantHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/tenant"
 	"github.com/masterfabric-go/masterfabric/internal/infrastructure/http/router"
 	infraKafka "github.com/masterfabric-go/masterfabric/internal/infrastructure/kafka"
-	infraWS "github.com/masterfabric-go/masterfabric/internal/infrastructure/websocket"
 	pgApimgmt "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/apimanagement"
 	pgAudit "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/audit"
 	pgIam "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/iam"
 	pgTenant "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/tenant"
+	infraWS "github.com/masterfabric-go/masterfabric/internal/infrastructure/websocket"
 
 	// Application use cases
 	apimgmtUC "github.com/masterfabric-go/masterfabric/internal/application/apimanagement/usecase"
@@ -47,18 +47,21 @@ import (
 	"github.com/masterfabric-go/masterfabric/internal/shared/telemetry"
 	"github.com/masterfabric-go/masterfabric/internal/shared/version"
 
+	waitlistUC "github.com/masterfabric-go/masterfabric/internal/application/waitlist/usecase"
 	yuvmiUC "github.com/masterfabric-go/masterfabric/internal/application/yuvmi/usecase"
 	"github.com/masterfabric-go/masterfabric/internal/domain/alignment"
+	waitlistHandlerPkg "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/waitlist"
 	yuvmiHandlerPkg "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/yuvmi"
+	infraNotify "github.com/masterfabric-go/masterfabric/internal/infrastructure/notification"
+	pgAsset "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/asset"
 	pgFutureSelf "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/futureself"
 	pgGoal "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/goal"
 	pgProfile "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/profile"
 	pgSpace "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/space"
-	pgAsset "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/asset"
 	pgSubscription "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/subscription"
-	infraStorage "github.com/masterfabric-go/masterfabric/internal/infrastructure/storage"
-	infraNotify "github.com/masterfabric-go/masterfabric/internal/infrastructure/notification"
+	pgWaitlist "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/waitlist"
 	"github.com/masterfabric-go/masterfabric/internal/infrastructure/scheduler"
+	infraStorage "github.com/masterfabric-go/masterfabric/internal/infrastructure/storage"
 )
 
 func main() {
@@ -71,6 +74,9 @@ func main() {
 func run() error {
 	// Load configuration
 	cfg := config.Load()
+	if err := cfg.Validate(); err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
 
 	// Initialize logger
 	log := logger.New(cfg.Log.Level, cfg.Log.Format)
@@ -225,6 +231,7 @@ func buildDependencies(
 		Redis:              redisClient,
 		CORSAllowedOrigins: cfg.Server.CORSAllowedOrigins,
 		MaxBodyBytes:       cfg.Server.MaxBodyBytes,
+		WaitlistConfig:     cfg.Waitlist,
 	}
 
 	if db == nil {
@@ -349,14 +356,14 @@ func buildDependencies(
 	// 3. Generic dynamic database handler (automatically performs CRUD operations)
 	backendRegistry := gateway.NewBackendRegistry()
 	dynamicResolver := gateway.NewDynamicHandlerResolver(backendRegistry, log, db)
-	
+
 	// Optional: Register service configurations for HTTP proxying
 	// Example:
 	// dynamicResolver.RegisterServiceConfig("product-service", gateway.ServiceConfig{
 	//     BaseURL: "https://api.example.com/products",
 	//     Headers: map[string]string{"Authorization": "Bearer token"},
 	// })
-	
+
 	// Optional: Register specific handlers for services that need custom logic
 	// Example:
 	// productHandler := handlers.NewProductHandler(...)
@@ -399,6 +406,10 @@ func buildDependencies(
 	engine := alignment.NewEngine(taskRepo, checkinRepo, goalRepo, planRepo, alignmentRepo)
 	yuvmiSvc := yuvmiUC.NewService(userRepo, profilePG, profilePG, futureSelfRepo, goalRepo, planRepo, taskRepo, checkinRepo, alignmentRepo, reviewRepo, notificationRepo, spaceRepo, assetRepo, subscriptionRepo, objectStorage, engine, pushClient, cfg.Yuvmi)
 	deps.YuvmiHandler = yuvmiHandlerPkg.NewHandler(yuvmiSvc)
+
+	waitlistSignupRepo := pgWaitlist.NewSignupRepo(db)
+	waitlistSignupUC := waitlistUC.NewSignupUseCase(waitlistSignupRepo, cfg.Waitlist)
+	deps.WaitlistHandler = waitlistHandlerPkg.NewHandler(waitlistSignupUC)
 
 	return deps, yuvmiSvc
 }

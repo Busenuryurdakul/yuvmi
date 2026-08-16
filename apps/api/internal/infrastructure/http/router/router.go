@@ -11,6 +11,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/masterfabric-go/masterfabric/internal/application/waitlist/dto"
+
 	// Handlers
 	apimgmtHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/apimanagement"
 	auditHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/audit"
@@ -18,11 +20,13 @@ import (
 	iamHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/iam"
 	realtimeHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/realtime"
 	tenantHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/tenant"
+	waitlistHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/waitlist"
 	yuvmiHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/yuvmi"
 
 	// Services & middleware
 	iamService "github.com/masterfabric-go/masterfabric/internal/domain/iam/service"
 	"github.com/masterfabric-go/masterfabric/internal/gateway"
+	"github.com/masterfabric-go/masterfabric/internal/shared/config"
 	"github.com/masterfabric-go/masterfabric/internal/shared/middleware"
 
 	// Repositories (for tenant resolver middleware)
@@ -44,6 +48,7 @@ type Dependencies struct {
 
 	CORSAllowedOrigins []string
 	MaxBodyBytes       int64
+	WaitlistConfig     config.WaitlistConfig
 
 	// Services
 	AuthService iamService.AuthService
@@ -56,13 +61,14 @@ type Dependencies struct {
 	AuditHandler    *auditHandler.Handler
 	RealtimeHandler *realtimeHandler.Handler
 	YuvmiHandler    *yuvmiHandler.Handler
+	WaitlistHandler *waitlistHandler.Handler
 
 	// Gateway
 	GatewayPipeline *gateway.Pipeline
 
 	// Repos needed for middleware
-	OrgRepo        tenantRepo.OrgRepository
-	WorkspaceRepo  tenantRepo.WorkspaceRepository
+	OrgRepo       tenantRepo.OrgRepository
+	WorkspaceRepo tenantRepo.WorkspaceRepository
 }
 
 // New creates the root Chi router with all middleware and routes.
@@ -97,6 +103,16 @@ func New(deps Dependencies) *chi.Mux {
 				r.Post("/refresh", deps.IAMHandler.RefreshToken)
 				r.Post("/forgot-password", deps.IAMHandler.ForgotPassword)
 				r.Post("/reset-password", deps.IAMHandler.ResetPassword)
+			}
+		})
+
+		// Public product routes (no JWT required)
+		r.Route("/public", func(r chi.Router) {
+			if deps.WaitlistHandler != nil {
+				r.With(
+					middleware.MaxBodyBytes(dto.SignupMaxBodyBytes),
+					middleware.WaitlistRateLimit(deps.Redis, deps.WaitlistConfig, deps.Logger),
+				).Post("/waitlist", deps.WaitlistHandler.Signup)
 			}
 		})
 
@@ -218,6 +234,16 @@ func New(deps Dependencies) *chi.Mux {
 			if deps.RealtimeHandler != nil {
 				r.Get("/ws", deps.RealtimeHandler.Connect)
 			}
+		})
+
+		r.Group(func(r chi.Router) {
+			if deps.AuthService != nil {
+				r.Use(middleware.JWTAuth(deps.AuthService))
+			}
+
+			if deps.OrgRepo != nil {
+				r.Use(middleware.TenantResolverWithWorkspace(deps.OrgRepo, deps.WorkspaceRepo))
+			}
 
 			// Gateway pipeline (rate limiting, permission enforcement for managed endpoints)
 			// Must be applied before specific routes so it can handle dynamic endpoints
@@ -320,7 +346,7 @@ func New(deps Dependencies) *chi.Mux {
 			_, _ = w.Write([]byte(`{"error":"not found","code":404}`))
 			return
 		}
-		
+
 		// For /api/v1 paths, check if gateway pipeline already handled it
 		// If not, return 404 (gateway would have returned response if endpoint existed)
 		w.Header().Set("Content-Type", "application/json")
