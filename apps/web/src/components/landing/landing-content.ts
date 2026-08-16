@@ -146,6 +146,15 @@ export const WAITLIST_SECTION = {
   emailPlaceholder: "E-posta adresin",
   emailLabel: "E-posta adresi",
   submitLabel: "Bekleme listesine katıl",
-  pendingPrimary: "Erken erişim kayıtları çok yakında açılıyor.",
-  pendingSecondary: "E-posta adresini henüz kaydetmiyoruz.",
+  submitLabelSubmitting: "Gönderiliyor...",
+  consentLabel:
+    "Erken erişim ve Yuvmi ile ilgili bilgilendirmeleri almak için e-posta adresimin kullanılmasını kabul ediyorum.",
+  consentRequired: "Devam etmek için onay kutusunu işaretle.",
+  helperText: "E-postanı yalnızca erken erişim ve ürün güncellemeleri için kullanırız.",
+  successPrimary: "Bekleme listesine eklendin.",
+  successSecondary: "Yuvmi hazır olduğunda sana haber vereceğiz.",
+  validationError: "Geçerli bir e-posta adresi gir ve onay kutusunu işaretle.",
+  rateLimitError: "Çok fazla deneme yaptın. Lütfen biraz sonra tekrar dene.",
+  serverError: "Şu anda kaydını alamıyoruz. Lütfen biraz sonra tekrar dene.",
+  configurationError: "Erken erişim kaydı şu anda kullanılamıyor.",
 } as const;
