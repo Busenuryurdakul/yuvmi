@@ -17,13 +17,15 @@
         "simulator": false
       },
       "env": {
-        "EXPO_PUBLIC_ALLOW_DEV_AUTH": "0"
+        "EXPO_PUBLIC_ALLOW_DEV_AUTH": "0",
+        "EXPO_PUBLIC_API_URL": "https://yuvmi-api.onrender.com"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_ALLOW_DEV_AUTH": "0"
+        "EXPO_PUBLIC_ALLOW_DEV_AUTH": "0",
+        "EXPO_PUBLIC_API_URL": "https://yuvmi-api.onrender.com"
       }
     }
   },
