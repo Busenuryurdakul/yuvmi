@@ -62,6 +62,12 @@ export function LandingMobileNav() {
         aria-label="Mobil navigasyon"
       >
         <MobileNavLinks />
+        <Link
+          href="/app"
+          className="landing-focus-ring block rounded-lg px-3 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-foreground/5"
+        >
+          Giriş
+        </Link>
       </nav>
     </details>
   );
