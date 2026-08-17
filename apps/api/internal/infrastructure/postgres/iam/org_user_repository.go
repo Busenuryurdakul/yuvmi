@@ -91,6 +91,9 @@ func (r *OrgUserRepo) ListByOrg(ctx context.Context, orgID uuid.UUID, offset, li
 		}
 		users = append(users, &ou)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, domainErr.New(domainErr.ErrInternal, "failed to list org users", err)
+	}
 	return users, total, nil
 }
 
@@ -111,6 +114,9 @@ func (r *OrgUserRepo) ListByUser(ctx context.Context, userID uuid.UUID) ([]*mode
 			return nil, domainErr.New(domainErr.ErrInternal, "failed to scan user org", err)
 		}
 		orgs = append(orgs, &ou)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, domainErr.New(domainErr.ErrInternal, "failed to list user orgs", err)
 	}
 	return orgs, nil
 }

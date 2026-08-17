@@ -1,10 +1,11 @@
 import { useCallback, useMemo, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { getRecommendedPlanTemplates, type PlanTemplate } from "@yuvmi/shared";
 import { Screen } from "@/components/ui/Screen";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Stepper } from "@/components/ui/Stepper";
+import { alert } from "@/lib/alert";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
@@ -44,8 +45,8 @@ export default function OnboardingPlanScreen() {
     setInitializing(true);
     try {
       const [goalResult, fsResult] = await Promise.allSettled([
-        fetchCurrentGoal(user.token),
-        fetchFutureSelf(user.token),
+        fetchCurrentGoal(),
+        fetchFutureSelf(),
       ]);
       const goal = goalResult.status === "fulfilled" ? goalResult.value : null;
       const fs = fsResult.status === "fulfilled" ? fsResult.value : null;
@@ -72,13 +73,13 @@ export default function OnboardingPlanScreen() {
     if (!user?.token || !goalId || !selected) {
       const message = "Hedef veya plan şablonu bulunamadı.";
       setError(message);
-      Alert.alert("Hata", message);
+      alert("Hata", message);
       return;
     }
     setError(null);
     setLoading(true);
     try {
-      const plan = await createPlan(user.token, {
+      const plan = await createPlan({
         goalId,
         title: selected.title,
         description: selected.description,
@@ -90,14 +91,14 @@ export default function OnboardingPlanScreen() {
         })),
       });
       setPlanId(plan.id);
-      await activatePlan(user.token, plan.id);
+      await activatePlan(plan.id);
       markOnboardingComplete();
       await refreshProfile();
       router.replace("/(onboarding)/complete");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Bir hata oluştu.";
       setError(message);
-      Alert.alert("Plan aktifleştirilemedi", message);
+      alert("Plan aktifleştirilemedi", message);
     } finally {
       setLoading(false);
     }

@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
@@ -31,9 +32,16 @@ import (
 	tenantRepo "github.com/masterfabric-go/masterfabric/internal/domain/tenant/repository"
 )
 
+// maybeRequirePermission enforces the given permission. When RBAC is not
+// configured, access is denied rather than silently allowed — an unconfigured
+// authorization service must never fail open.
 func maybeRequirePermission(rbac iamService.RBACService, permission string) func(http.Handler) http.Handler {
 	if rbac == nil {
-		return func(next http.Handler) http.Handler { return next }
+		return func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				writeNotFound(w)
+			})
+		}
 	}
 	return middleware.RequirePermission(rbac, permission)
 }
@@ -157,6 +165,10 @@ func New(deps Dependencies) *chi.Mux {
 	r.Route("/api/v1", func(r chi.Router) {
 		// Public auth routes (no JWT required)
 		r.Route("/auth", func(r chi.Router) {
+			// 20 requests/5min per IP: generous enough for a genuine user
+			// retrying a typo, tight enough to blunt credential stuffing and
+			// forgot-password email bombing.
+			r.Use(middleware.RateLimit(20, 5*time.Minute))
 			if deps.IAMHandler != nil {
 				r.Post("/register", deps.IAMHandler.Register)
 				r.Post("/login", deps.IAMHandler.Login)
@@ -286,23 +298,6 @@ func New(deps Dependencies) *chi.Mux {
 				r.Use(middleware.JWTAuth(deps.AuthService))
 			}
 
-			// Tenant resolution middleware (with workspace support)
-			if deps.OrgRepo != nil {
-				// Note: WorkspaceRepo can be nil - workspace resolution is optional
-				r.Use(middleware.TenantResolverWithWorkspace(deps.OrgRepo, deps.WorkspaceRepo))
-			}
-
-			// Gateway pipeline (rate limiting, permission enforcement for managed endpoints)
-			// chi requires all middleware before any routes on the same mux.
-			if deps.GatewayPipeline != nil {
-				r.Use(deps.GatewayPipeline.Enforce)
-			}
-
-			// WebSocket endpoint (upgrade requests are not HTTP proxy)
-			if deps.RealtimeHandler != nil {
-				r.Get("/ws", deps.RealtimeHandler.Connect)
-			}
-
 			// User routes (masterfabric IAM)
 			if deps.IAMHandler != nil {
 				r.With(maybeRequirePermission(deps.RBACService, "user:read")).Route("/users", func(r chi.Router) {
@@ -312,78 +307,14 @@ func New(deps Dependencies) *chi.Mux {
 				r.With(maybeRequirePermission(deps.RBACService, "user:write")).Post("/roles/assign", deps.IAMHandler.AssignRole)
 			}
 
-			// Organization routes
-			if deps.TenantHandler != nil {
-				r.Route("/organizations", func(r chi.Router) {
-					r.With(maybeRequirePermission(deps.RBACService, "org:write")).Post("/", deps.TenantHandler.CreateOrg)
-					r.With(maybeRequirePermission(deps.RBACService, "org:read")).Get("/", deps.TenantHandler.ListOrgs)
-					r.Route("/{orgId}", func(r chi.Router) {
-						r.With(maybeRequirePermission(deps.RBACService, "org:read")).Get("/", deps.TenantHandler.GetOrg)
-
-						// Apps under organization
-						r.Route("/apps", func(r chi.Router) {
-							r.With(maybeRequirePermission(deps.RBACService, "app:write")).Post("/", deps.TenantHandler.CreateApp)
-							r.With(maybeRequirePermission(deps.RBACService, "app:read")).Get("/", deps.TenantHandler.ListApps)
-							r.Route("/{appId}", func(r chi.Router) {
-								r.With(maybeRequirePermission(deps.RBACService, "app:read")).Get("/", deps.TenantHandler.GetApp)
-
-								// API keys under app
-								r.Route("/keys", func(r chi.Router) {
-									r.With(maybeRequirePermission(deps.RBACService, "app:write")).Post("/", deps.TenantHandler.CreateAPIKey)
-									r.With(maybeRequirePermission(deps.RBACService, "app:read")).Get("/", deps.TenantHandler.ListAPIKeys)
-									r.With(maybeRequirePermission(deps.RBACService, "app:write")).Delete("/{keyId}", deps.TenantHandler.RevokeAPIKey)
-								})
-
-								// Endpoints under app
-								if deps.APIMgmtHandler != nil {
-									r.Route("/endpoints", func(r chi.Router) {
-										r.With(maybeRequirePermission(deps.RBACService, "endpoint:write")).Post("/", deps.APIMgmtHandler.DefineEndpoint)
-										r.With(maybeRequirePermission(deps.RBACService, "endpoint:read")).Get("/", deps.APIMgmtHandler.ListEndpoints)
-										r.Route("/{endpointId}", func(r chi.Router) {
-											r.With(maybeRequirePermission(deps.RBACService, "endpoint:read")).Get("/", deps.APIMgmtHandler.GetEndpoint)
-											r.With(maybeRequirePermission(deps.RBACService, "endpoint:write")).Post("/retire", deps.APIMgmtHandler.RetireEndpoint)
-											r.With(maybeRequirePermission(deps.RBACService, "endpoint:write")).Post("/activate", deps.APIMgmtHandler.ActivateEndpoint)
-											r.With(maybeRequirePermission(deps.RBACService, "endpoint:write")).Put("/policy", deps.APIMgmtHandler.UpdatePolicy)
-											r.With(maybeRequirePermission(deps.RBACService, "endpoint:read")).Get("/policy", deps.APIMgmtHandler.GetPolicy)
-										})
-									})
-								}
-							})
-						})
-
-						// Workspaces under organization
-						r.Route("/workspaces", func(r chi.Router) {
-							r.With(maybeRequirePermission(deps.RBACService, "org:write")).Post("/", deps.TenantHandler.CreateWorkspace)
-							r.With(maybeRequirePermission(deps.RBACService, "org:read")).Get("/", deps.TenantHandler.ListWorkspaces)
-							r.Route("/{workspaceId}", func(r chi.Router) {
-								r.With(maybeRequirePermission(deps.RBACService, "org:write")).Put("/", deps.TenantHandler.UpdateWorkspace)
-							})
-						})
-
-						// Audit logs under organization
-						if deps.AuditHandler != nil {
-							r.With(maybeRequirePermission(deps.RBACService, "org:read")).Get("/audit-logs", deps.AuditHandler.ListByOrg)
-						}
-					})
-				})
-			}
-
-			// Audit logs by user
-			if deps.AuditHandler != nil {
-				r.With(maybeRequirePermission(deps.RBACService, "org:read")).Get("/users/{userId}/audit-logs", deps.AuditHandler.ListByUser)
-			}
-
-			// Catch-all for managed endpoints (must be last in the group). The
-			// gateway pipeline answers anything it recognises before reaching
-			// here, so arriving at this point means no endpoint matched.
+			// Catch-all: arriving here means no endpoint matched.
 			r.HandleFunc("/*", func(w http.ResponseWriter, _ *http.Request) {
 				writeNotFound(w)
 			})
 		})
 	})
 
-	// Anything not matched above — including /api/v1 paths the gateway pipeline
-	// did not claim — gets the same opaque 404.
+	// Anything not matched above gets the same opaque 404.
 	r.NotFound(func(w http.ResponseWriter, _ *http.Request) {
 		writeNotFound(w)
 	})

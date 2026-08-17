@@ -1,4 +1,4 @@
-import type { LifeDomain } from "@yuvmi/shared";
+import type { GoalStatus, LifeDomain, PlanStatus } from "@yuvmi/shared";
 
 export type ApiErrorBody = {
   error?: { message: string; code: number };
@@ -54,7 +54,7 @@ export type GoalResponse = {
   title: string;
   description: string;
   targetDate?: string;
-  status: string;
+  status: GoalStatus;
   createdAt: string;
 };
 
@@ -63,7 +63,7 @@ export type PlanResponse = {
   goalId?: string;
   title: string;
   description?: string;
-  status: string;
+  status: PlanStatus;
   version: number;
   steps: Array<{
     id: string;
@@ -82,8 +82,18 @@ export type DailyTaskResponse = {
   title: string;
   description: string;
   status: "pending" | "in_progress" | "completed" | "skipped";
+  pearlBalance?: number;
   completedAt?: string;
   skippedReason?: string;
+};
+
+export type PearlBalanceResponse = {
+  balance: number;
+};
+
+export type PearlAwardResponse = {
+  balance: number;
+  awarded: boolean;
 };
 
 export type CheckinResponse = {

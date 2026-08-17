@@ -54,6 +54,9 @@ func (r *NotificationRepo) ListTokens(ctx context.Context, userID uuid.UUID) ([]
 		}
 		tokens = append(tokens, &t)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return tokens, nil
 }
 
@@ -91,6 +94,9 @@ func (r *NotificationRepo) ListNotifications(ctx context.Context, userID uuid.UU
 			return nil, err
 		}
 		out = append(out, n)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return out, nil
 }

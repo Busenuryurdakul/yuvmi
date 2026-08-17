@@ -31,6 +31,9 @@ func (r *NotificationRepo) ListPushTargets(ctx context.Context) ([]PushTarget, e
 		}
 		targets = append(targets, t)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return targets, nil
 }
 

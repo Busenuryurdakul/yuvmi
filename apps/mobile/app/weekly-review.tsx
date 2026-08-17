@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import { SubpageScreen } from "@/components/ui/SubpageScreen";
 import { Button } from "@/components/ui/Button";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { BigStat, StatBlock } from "@/components/today/StatBlock";
+import { alert } from "@/lib/alert";
 import { useAuth } from "@/context/AuthContext";
 import { applyWeeklyReview, fetchCurrentWeeklyReview } from "@/lib/api/yuvmi";
 import type { WeeklyReviewResponse } from "@/lib/api/types";
@@ -21,10 +22,10 @@ export default function WeeklyReviewScreen() {
     if (!user?.token) return;
     setLoading(true);
     try {
-      setReview(await fetchCurrentWeeklyReview(user.token));
+      setReview(await fetchCurrentWeeklyReview());
     } catch (error) {
       if (error instanceof ApiError && error.code === 404) setReview(null);
-      else Alert.alert("Yüklenemedi", error instanceof Error ? error.message : "Bir hata oluştu.");
+      else alert("Yüklenemedi", error instanceof Error ? error.message : "Bir hata oluştu.");
     } finally {
       setLoading(false);
     }
@@ -38,11 +39,11 @@ export default function WeeklyReviewScreen() {
     if (!user?.token || !review) return;
     setApplying(true);
     try {
-      const plan = await applyWeeklyReview(user.token, review.id);
-      Alert.alert("Plan güncellendi", `Plan v${plan.version} aktif.`);
+      const plan = await applyWeeklyReview(review.id);
+      alert("Plan güncellendi", `Plan v${plan.version} aktif.`);
       router.back();
     } catch (error) {
-      Alert.alert("Uygulanamadı", error instanceof Error ? error.message : "Bir hata oluştu.");
+      alert("Uygulanamadı", error instanceof Error ? error.message : "Bir hata oluştu.");
     } finally {
       setApplying(false);
     }

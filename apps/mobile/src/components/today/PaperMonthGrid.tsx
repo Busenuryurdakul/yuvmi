@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     letterSpacing: 1.2,
     fontWeight: theme.font.weight.medium,
-    color: theme.color.inkMuted,
+    color: theme.color.ink40,
     textAlign: "center",
   },
   row: {
@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   dateBadgeToday: {
-    backgroundColor: theme.color.accent,
+    backgroundColor: theme.color.blue,
   },
   dateNum: {
     fontSize: theme.font.size.sm,
@@ -151,10 +151,10 @@ const styles = StyleSheet.create({
   },
   dateLetter: {
     fontSize: theme.font.size.sm,
-    color: theme.color.inkMuted,
+    color: theme.color.ink40,
   },
   dateLetterToday: {
-    color: theme.color.accent,
+    color: theme.color.blue,
     fontWeight: theme.font.weight.medium,
   },
   cell: {

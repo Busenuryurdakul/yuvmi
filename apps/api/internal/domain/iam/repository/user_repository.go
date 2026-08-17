@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/masterfabric-go/masterfabric/internal/domain/iam/model"
@@ -16,4 +17,16 @@ type UserRepository interface {
 	Update(ctx context.Context, user *model.User) error
 	Delete(ctx context.Context, id uuid.UUID) error
 	List(ctx context.Context, offset, limit int) ([]*model.User, int, error)
+
+	// GetPearlBalance returns the user's current İnci (pearl) balance.
+	GetPearlBalance(ctx context.Context, userID uuid.UUID) (int, error)
+	// AwardPearls records a pearl award and atomically increments the user's
+	// balance, returning the new balance.
+	AwardPearls(ctx context.Context, userID uuid.UUID, reason string, amount int) (int, error)
+	// AwardPearlsIfUnderDailyCap atomically checks whether the reason has
+	// already been awarded dailyCap times since the given time and, if not,
+	// grants the award — serialized per user+reason so concurrent callers
+	// can't both slip past the cap. Returns the resulting balance and
+	// whether an award was actually granted.
+	AwardPearlsIfUnderDailyCap(ctx context.Context, userID uuid.UUID, reason string, amount, dailyCap int, since time.Time) (balance int, awarded bool, err error)
 }

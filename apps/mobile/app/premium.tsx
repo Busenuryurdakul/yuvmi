@@ -1,5 +1,5 @@
 import { useCallback, useEffect } from "react";
-import { Alert, Share, StyleSheet, Text, View } from "react-native";
+import { Share, StyleSheet, Text, View } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
 import * as WebBrowser from "expo-web-browser";
 import { useLocalSearchParams } from "expo-router";
@@ -16,6 +16,7 @@ import {
   exportUserData,
 } from "@/lib/api/yuvmi";
 import { ApiError } from "@/lib/api/client";
+import { alert } from "@/lib/alert";
 import { theme } from "@/theme";
 
 const PREMIUM_FEATURES = [
@@ -44,43 +45,43 @@ export default function PremiumScreen() {
   useEffect(() => {
     if (checkout === "success") {
       void refresh();
-      Alert.alert("Ödeme alındı", "Premium planın birkaç saniye içinde aktif olacak.");
+      alert("Ödeme alındı", "Premium planın birkaç saniye içinde aktif olacak.");
     }
   }, [checkout, refresh]);
 
   async function handleCheckout() {
     if (!token) return;
     try {
-      const session = await createSubscriptionCheckout(token);
+      const session = await createSubscriptionCheckout();
       await WebBrowser.openBrowserAsync(session.url);
       await refresh();
     } catch (err) {
       if (err instanceof ApiError && err.code === 501) {
-        Alert.alert(
+        alert(
           "Ödeme yapılandırılmadı",
           "Stripe anahtarları henüz ayarlanmadı. Geliştirme modunda test edebilirsin.",
         );
         return;
       }
-      Alert.alert("Premium", err instanceof ApiError ? err.message : "Ödeme başlatılamadı");
+      alert("Premium", err instanceof ApiError ? err.message : "Ödeme başlatılamadı");
     }
   }
 
   async function handleDevUpgrade() {
     if (!token) return;
     try {
-      await devUpgradeSubscription(token);
+      await devUpgradeSubscription();
       await refresh();
-      Alert.alert("Premium aktif", "Geliştirme modunda Premium plan etkinleştirildi.");
+      alert("Premium aktif", "Geliştirme modunda Premium plan etkinleştirildi.");
     } catch (err) {
       const message = err instanceof ApiError ? err.message : "Yükseltme başarısız";
-      Alert.alert("Premium", message);
+      alert("Premium", message);
     }
   }
 
   async function handleCancel() {
     if (!token) return;
-    Alert.alert(
+    alert(
       "Aboneliği iptal et",
       "Premium erişimin mevcut dönem sonuna kadar devam eder.",
       [
@@ -91,11 +92,11 @@ export default function PremiumScreen() {
           onPress: () => {
             void (async () => {
               try {
-                await cancelSubscription(token);
+                await cancelSubscription();
                 await refresh();
-                Alert.alert("İptal edildi", "Aboneliğin dönem sonunda sona erecek.");
+                alert("İptal edildi", "Aboneliğin dönem sonunda sona erecek.");
               } catch (err) {
-                Alert.alert("İptal", err instanceof ApiError ? err.message : "İşlem başarısız");
+                alert("İptal", err instanceof ApiError ? err.message : "İşlem başarısız");
               }
             })();
           },
@@ -107,7 +108,7 @@ export default function PremiumScreen() {
   const handleExport = useCallback(async () => {
     if (!token) return;
     try {
-      const payload = await exportUserData(token);
+      const payload = await exportUserData();
       if (payload.encoding === "base64" && typeof payload.data === "string") {
         const fileUri = `${FileSystem.cacheDirectory ?? ""}${payload.filename}`;
         await FileSystem.writeAsStringAsync(fileUri, payload.data, {
@@ -126,10 +127,10 @@ export default function PremiumScreen() {
       });
     } catch (err) {
       if (err instanceof ApiError && err.code === 402) {
-        Alert.alert("Premium gerekli", "Veri dışa aktarma Premium plana dahildir.");
+        alert("Premium gerekli", "Veri dışa aktarma Premium plana dahildir.");
         return;
       }
-      Alert.alert("Dışa aktarma", err instanceof Error ? err.message : "İşlem başarısız");
+      alert("Dışa aktarma", err instanceof Error ? err.message : "İşlem başarısız");
     }
   }, [token]);
 

@@ -77,6 +77,9 @@ func (r *CheckinRepo) ListSince(ctx context.Context, userID uuid.UUID, since tim
 		_ = json.Unmarshal(domainScoresJSON, &e.DomainScores)
 		entries = append(entries, &e)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return entries, nil
 }
 
@@ -138,6 +141,9 @@ func (r *AlignmentRepo) ListHistory(ctx context.Context, userID uuid.UUID, limit
 		_ = json.Unmarshal(factorsJSON, &s.Factors)
 		out = append(out, &s)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -159,6 +165,9 @@ func (r *AlignmentRepo) ListSince(ctx context.Context, userID uuid.UUID, since t
 		}
 		_ = json.Unmarshal(factorsJSON, &s.Factors)
 		out = append(out, &s)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return out, nil
 }

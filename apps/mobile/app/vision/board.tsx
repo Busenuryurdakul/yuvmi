@@ -481,7 +481,7 @@ const styles = StyleSheet.create({
   
   // Custom Styles Added
   pickerOverlay: {
-    ...StyleSheet.absoluteFill as any,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(11, 23, 44, 0.4)",
     zIndex: 999,
     justifyContent: "center",

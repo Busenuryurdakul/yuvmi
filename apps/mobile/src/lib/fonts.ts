@@ -8,7 +8,7 @@ import {
   useFonts,
 } from "@expo-google-fonts/schibsted-grotesk";
 
-export function useAppFonts() {
+export function useAppFonts(): [boolean, Error | null] {
   return useFonts({
     SchibstedGrotesk_400Regular,
     SchibstedGrotesk_500Medium,

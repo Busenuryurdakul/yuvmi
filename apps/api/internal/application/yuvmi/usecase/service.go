@@ -2,7 +2,9 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,7 +21,6 @@ import (
 	assetRepo "github.com/masterfabric-go/masterfabric/internal/domain/asset/repository"
 	spaceRepo "github.com/masterfabric-go/masterfabric/internal/domain/space/repository"
 	subRepo "github.com/masterfabric-go/masterfabric/internal/domain/subscription/repository"
-	pgProfile "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/profile"
 	infraNotify "github.com/masterfabric-go/masterfabric/internal/infrastructure/notification"
 	"github.com/masterfabric-go/masterfabric/internal/infrastructure/storage"
 	"github.com/masterfabric-go/masterfabric/internal/shared/config"
@@ -29,7 +30,6 @@ import (
 type Service struct {
 	users         iamRepo.UserRepository
 	profiles      profileRepo.ProfileRepository
-	profilePG     *pgProfile.ProfileRepo
 	futureSelf    fsRepo.FutureSelfRepository
 	goals         goalRepo.GoalRepository
 	plans         goalRepo.PlanRepository
@@ -48,36 +48,41 @@ type Service struct {
 	stripe        *infraStripe.Client
 }
 
-func NewService(
-	users iamRepo.UserRepository,
-	profiles profileRepo.ProfileRepository,
-	profilePG *pgProfile.ProfileRepo,
-	futureSelf fsRepo.FutureSelfRepository,
-	goals goalRepo.GoalRepository,
-	plans goalRepo.PlanRepository,
-	tasks goalRepo.TaskRepository,
-	checkins profileRepo.CheckinRepository,
-	alignment profileRepo.AlignmentRepository,
-	reviews goalRepo.WeeklyReviewRepository,
-	notifications profileRepo.NotificationRepository,
-	spaces spaceRepo.SpaceRepository,
-	assets assetRepo.AssetRepository,
-	subscriptions subRepo.SubscriptionRepository,
-	store storage.ObjectStorage,
-	engine *alignment.Engine,
-	push *infraNotify.ExpoPushClient,
-	yuvmiCfg config.YuvmiConfig,
-) *Service {
+// Deps holds every dependency Service needs. Grouping them into a struct
+// avoids a long positional parameter list where several arguments share the
+// same shape (the *Repository interfaces) and are easy to transpose by
+// mistake.
+type Deps struct {
+	Users         iamRepo.UserRepository
+	Profiles      profileRepo.ProfileRepository
+	FutureSelf    fsRepo.FutureSelfRepository
+	Goals         goalRepo.GoalRepository
+	Plans         goalRepo.PlanRepository
+	Tasks         goalRepo.TaskRepository
+	Checkins      profileRepo.CheckinRepository
+	Alignment     profileRepo.AlignmentRepository
+	Reviews       goalRepo.WeeklyReviewRepository
+	Notifications profileRepo.NotificationRepository
+	Spaces        spaceRepo.SpaceRepository
+	Assets        assetRepo.AssetRepository
+	Subscriptions subRepo.SubscriptionRepository
+	Storage       storage.ObjectStorage
+	Engine        *alignment.Engine
+	Push          *infraNotify.ExpoPushClient
+	YuvmiCfg      config.YuvmiConfig
+}
+
+func NewService(deps Deps) *Service {
 	svc := &Service{
-		users: users, profiles: profiles, profilePG: profilePG,
-		futureSelf: futureSelf, goals: goals, plans: plans, tasks: tasks,
-		checkins: checkins, alignment: alignment, reviews: reviews,
-		notifications: notifications, spaces: spaces, assets: assets,
-		subscriptions: subscriptions, storage: store, engine: engine, push: push,
-		yuvmiCfg: yuvmiCfg,
+		users: deps.Users, profiles: deps.Profiles,
+		futureSelf: deps.FutureSelf, goals: deps.Goals, plans: deps.Plans, tasks: deps.Tasks,
+		checkins: deps.Checkins, alignment: deps.Alignment, reviews: deps.Reviews,
+		notifications: deps.Notifications, spaces: deps.Spaces, assets: deps.Assets,
+		subscriptions: deps.Subscriptions, storage: deps.Storage, engine: deps.Engine, push: deps.Push,
+		yuvmiCfg: deps.YuvmiCfg,
 	}
-	if yuvmiCfg.Stripe.Enabled() {
-		svc.stripe = infraStripe.NewClient(yuvmiCfg.Stripe.SecretKey, yuvmiCfg.Stripe.WebhookSecret)
+	if deps.YuvmiCfg.Stripe.Enabled() {
+		svc.stripe = infraStripe.NewClient(deps.YuvmiCfg.Stripe.SecretKey, deps.YuvmiCfg.Stripe.WebhookSecret)
 	}
 	return svc
 }
@@ -90,7 +95,7 @@ func (s *Service) GetMe(ctx context.Context, userID uuid.UUID) (*dto.UserProfile
 	profile, err := s.profiles.GetByUserID(ctx, userID)
 	if err != nil {
 		displayName := user.FullName()
-		_ = s.profilePG.EnsureDefault(ctx, userID, displayName)
+		_ = s.profiles.EnsureDefault(ctx, userID, displayName)
 		profile = &model.UserProfile{
 			UserID: userID, DisplayName: displayName, Locale: "tr", Timezone: "Europe/Istanbul",
 		}
@@ -130,7 +135,11 @@ func (s *Service) UpdateMe(ctx context.Context, userID uuid.UUID, req dto.Update
 }
 
 func (s *Service) CreateFutureSelf(ctx context.Context, userID uuid.UUID, req dto.CreateFutureSelfRequest) (*dto.FutureSelfResponse, error) {
-	if existing, _ := s.futureSelf.GetByUserID(ctx, userID); existing != nil {
+	existing, err := s.futureSelf.GetByUserID(ctx, userID)
+	if err != nil && !errors.Is(err, domainErr.ErrNotFound) {
+		return nil, err
+	}
+	if existing != nil {
 		return nil, domainErr.New(domainErr.ErrAlreadyExists, "future self already exists", nil)
 	}
 	fs := &fsmodel.FutureSelf{
@@ -286,13 +295,6 @@ func (s *Service) ActivatePlan(ctx context.Context, userID, planID uuid.UUID) (*
 	if err != nil {
 		return nil, err
 	}
-	if err := s.plans.SupersedeOthers(ctx, userID, planID); err != nil {
-		return nil, fmt.Errorf("supersede plans: %w", err)
-	}
-	if err := s.plans.Activate(ctx, userID, planID); err != nil {
-		return nil, err
-	}
-	plan.Status = goalmodel.PlanActive
 
 	today := todayUTC()
 	step := firstStepForDay(plan, 0)
@@ -300,15 +302,11 @@ func (s *Service) ActivatePlan(ctx context.Context, userID, planID uuid.UUID) (*
 		UserID: userID, PlanID: plan.ID, Date: today,
 		Title: step.Title, Description: step.Description, Status: goalmodel.TaskPending,
 	}
-	if err := s.tasks.Create(ctx, task); err != nil {
-		return nil, fmt.Errorf("create daily task: %w", err)
+
+	if err := s.plans.ActivatePlanTx(ctx, userID, planID, plan.GoalID, task); err != nil {
+		return nil, err
 	}
 
-	if plan.GoalID != nil {
-		if err := s.goals.Activate(ctx, userID, *plan.GoalID); err != nil {
-			return nil, fmt.Errorf("activate goal: %w", err)
-		}
-	}
 	if err := s.profiles.SetOnboardingComplete(ctx, userID); err != nil {
 		return nil, fmt.Errorf("set onboarding complete: %w", err)
 	}
@@ -329,15 +327,24 @@ func (s *Service) GetTodayTask(ctx context.Context, userID uuid.UUID) (*dto.Dail
 }
 
 func (s *Service) CompleteTask(ctx context.Context, userID, taskID uuid.UUID) (*dto.DailyTaskResponse, error) {
-	if err := s.tasks.Complete(ctx, userID, taskID); err != nil {
+	transitioned, err := s.tasks.Complete(ctx, userID, taskID)
+	if err != nil {
 		return nil, err
 	}
 	task, err := s.tasks.GetByID(ctx, userID, taskID)
 	if err != nil {
 		return nil, err
 	}
-	_, _ = s.engine.Recalculate(ctx, userID, todayUTC())
-	return toTaskResponse(task), nil
+	if _, err := s.engine.Recalculate(ctx, userID, todayUTC()); err != nil {
+		slog.ErrorContext(ctx, "recalculate alignment after task complete failed", "user_id", userID, "error", err)
+	}
+	resp := toTaskResponse(task)
+	if transitioned {
+		if balance, err := s.users.AwardPearls(ctx, userID, pearlReasonTaskComplete, pearlAmountTaskComplete); err == nil {
+			resp.PearlBalance = &balance
+		}
+	}
+	return resp, nil
 }
 
 func (s *Service) SkipTask(ctx context.Context, userID, taskID uuid.UUID, reason *string) (*dto.DailyTaskResponse, error) {
@@ -348,8 +355,63 @@ func (s *Service) SkipTask(ctx context.Context, userID, taskID uuid.UUID, reason
 	if err != nil {
 		return nil, err
 	}
-	_, _ = s.engine.Recalculate(ctx, userID, todayUTC())
+	if _, err := s.engine.Recalculate(ctx, userID, todayUTC()); err != nil {
+		slog.ErrorContext(ctx, "recalculate alignment after task skip failed", "user_id", userID, "error", err)
+	}
 	return toTaskResponse(task), nil
+}
+
+// --- İnci (pearl) economy ---
+
+const (
+	pearlReasonTaskComplete       = "task_complete"
+	pearlReasonNotificationDesign = "notification_design_confirm"
+	pearlReasonWaveSurvived       = "wave_survived"
+
+	pearlAmountTaskComplete       = 2
+	pearlAmountNotificationDesign = 3
+	pearlAmountWaveSurvived       = 1
+
+	pearlDailyCapNotificationDesign = 3
+	pearlDailyCapWaveSurvived       = 10
+)
+
+func (s *Service) GetPearlBalance(ctx context.Context, userID uuid.UUID) (*dto.PearlBalanceResponse, error) {
+	balance, err := s.users.GetPearlBalance(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return &dto.PearlBalanceResponse{Balance: balance}, nil
+}
+
+// awardPearlsWithDailyCap grants a pearl award unless the reason has already
+// been awarded dailyCap times today (UTC), in which case it's a no-op that
+// still returns the current balance. The check-and-award is atomic at the
+// repository layer so concurrent requests can't both slip past the cap.
+func (s *Service) awardPearlsWithDailyCap(ctx context.Context, userID uuid.UUID, reason string, amount, dailyCap int) (int, bool, error) {
+	since := time.Now().UTC().Truncate(24 * time.Hour)
+	return s.users.AwardPearlsIfUnderDailyCap(ctx, userID, reason, amount, dailyCap, since)
+}
+
+// ConfirmNotificationDesign awards pearls when the user designs and confirms
+// a notification, capped per day since the same reason can be triggered
+// repeatedly (multiple notification types).
+func (s *Service) ConfirmNotificationDesign(ctx context.Context, userID uuid.UUID) (*dto.PearlAwardResponse, error) {
+	balance, awarded, err := s.awardPearlsWithDailyCap(ctx, userID, pearlReasonNotificationDesign, pearlAmountNotificationDesign, pearlDailyCapNotificationDesign)
+	if err != nil {
+		return nil, err
+	}
+	return &dto.PearlAwardResponse{Balance: balance, Awarded: awarded}, nil
+}
+
+// RecordWaveSurvived awards pearls when the user surfs an urge/wave
+// ("dalga atlatma"), capped per day to prevent trivial spam.
+func (s *Service) RecordWaveSurvived(ctx context.Context, userID uuid.UUID) (*dto.PearlAwardResponse, error) {
+	balance, awarded, err := s.awardPearlsWithDailyCap(ctx, userID, pearlReasonWaveSurvived, pearlAmountWaveSurvived, pearlDailyCapWaveSurvived)
+	if err != nil {
+		return nil, err
+	}
+	return &dto.PearlAwardResponse{Balance: balance, Awarded: awarded}, nil
 }
 
 func (s *Service) GetTodayCheckin(ctx context.Context, userID uuid.UUID) (*dto.CheckinResponse, error) {
@@ -372,7 +434,9 @@ func (s *Service) UpsertCheckin(ctx context.Context, userID uuid.UUID, req dto.U
 	if err != nil {
 		return nil, err
 	}
-	_, _ = s.engine.Recalculate(ctx, userID, todayUTC())
+	if _, err := s.engine.Recalculate(ctx, userID, todayUTC()); err != nil {
+		slog.ErrorContext(ctx, "recalculate alignment after checkin upsert failed", "user_id", userID, "error", err)
+	}
 	return toCheckinResponse(saved), nil
 }
 

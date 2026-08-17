@@ -53,7 +53,7 @@ const styles = StyleSheet.create({
   },
   status: {
     fontSize: theme.font.size.sm,
-    color: theme.color.brand.tealText,
+    color: theme.color.blueDeep,
     fontWeight: theme.font.weight.medium,
   },
   actions: { gap: theme.space.sm },

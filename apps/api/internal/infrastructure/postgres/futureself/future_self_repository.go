@@ -95,6 +95,9 @@ func (r *FutureSelfRepo) GetByUserID(ctx context.Context, userID uuid.UUID) (*mo
 		item.Domain = model.LifeDomain(domain)
 		fs.VisionItems = append(fs.VisionItems, item)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.New(errors.ErrInternal, "failed to iterate vision items", err)
+	}
 
 	return &fs, nil
 }

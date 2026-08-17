@@ -97,5 +97,8 @@ func (r *APIKeyRepo) ListByApp(ctx context.Context, appID uuid.UUID) ([]*model.A
 		}
 		keys = append(keys, &k)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, domainErr.New(domainErr.ErrInternal, "failed to list api keys", err)
+	}
 	return keys, nil
 }

@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-  Alert,
   Platform,
   Pressable,
   StyleSheet,
@@ -13,6 +12,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SubpageScreen } from "@/components/ui/SubpageScreen";
 import { Eyebrow, Glass } from "@/components/ui/Glass";
 import { Button } from "@/components/ui/Button";
+import { useAuth } from "@/context/AuthContext";
+import { useMode } from "@/context/ModeContext";
+import { confirmNotificationDesign } from "@/lib/api/yuvmi";
+import { alert } from "@/lib/alert";
 import { theme } from "@/theme";
 
 type CustomNotification = {
@@ -35,6 +38,9 @@ const STORAGE_KEYS = {
 };
 
 export default function NotificationsScreen() {
+  const { user } = useAuth();
+  const { patchPrefs } = useMode();
+
   // Times
   const [sabahTime, setSabahTime] = useState("08:00");
   const [aksamTime, setAksamTime] = useState("21:30");
@@ -112,11 +118,11 @@ export default function NotificationsScreen() {
     const txt = customText.trim();
     const time = customTime.trim();
     if (!txt) {
-      Alert.alert("Hata", "Lütfen bir bildirim metni yazın.");
+      alert("Hata", "Lütfen bir bildirim metni yazın.");
       return;
     }
     if (!/^\d{2}:\d{2}$/.test(time)) {
-      Alert.alert("Hata", "Lütfen geçerli bir saat girin (Örn: 14:00).");
+      alert("Hata", "Lütfen geçerli bir saat girin (Örn: 14:00).");
       return;
     }
 
@@ -131,6 +137,17 @@ export default function NotificationsScreen() {
     setCustomList(nextList);
     setCustomText("");
     await AsyncStorage.setItem(STORAGE_KEYS.CUSTOM_LIST, JSON.stringify(nextList));
+
+    if (!user?.token) return;
+    try {
+      const award = await confirmNotificationDesign();
+      await patchPrefs({ tohum: award.balance });
+      if (award.awarded) {
+        alert("Bildirim tasarlandı 🫧", "+3 İnci kazandın — kendi sözlerinle konuştun.");
+      }
+    } catch {
+      /* pearl award is a bonus, not critical */
+    }
   };
 
   const removeCustomNotification = async (id: string) => {
@@ -205,6 +222,7 @@ export default function NotificationsScreen() {
             }}
             trackColor={{ false: "rgba(11, 18, 32, 0.12)", true: theme.color.blue }}
             thumbColor="#ffffff"
+            {...{ activeThumbColor: "#ffffff" }}
             ios_backgroundColor="rgba(11, 18, 32, 0.08)"
           />
         </View>
@@ -219,6 +237,7 @@ export default function NotificationsScreen() {
             }}
             trackColor={{ false: "rgba(11, 18, 32, 0.12)", true: theme.color.blue }}
             thumbColor="#ffffff"
+            {...{ activeThumbColor: "#ffffff" }}
             ios_backgroundColor="rgba(11, 18, 32, 0.08)"
           />
         </View>
@@ -233,6 +252,7 @@ export default function NotificationsScreen() {
             }}
             trackColor={{ false: "rgba(11, 18, 32, 0.12)", true: theme.color.blue }}
             thumbColor="#ffffff"
+            {...{ activeThumbColor: "#ffffff" }}
             ios_backgroundColor="rgba(11, 18, 32, 0.08)"
           />
         </View>
@@ -247,6 +267,7 @@ export default function NotificationsScreen() {
             }}
             trackColor={{ false: "rgba(11, 18, 32, 0.12)", true: theme.color.blue }}
             thumbColor="#ffffff"
+            {...{ activeThumbColor: "#ffffff" }}
             ios_backgroundColor="rgba(11, 18, 32, 0.08)"
           />
         </View>
@@ -261,6 +282,7 @@ export default function NotificationsScreen() {
             }}
             trackColor={{ false: "rgba(11, 18, 32, 0.12)", true: theme.color.blue }}
             thumbColor="#ffffff"
+            {...{ activeThumbColor: "#ffffff" }}
             ios_backgroundColor="rgba(11, 18, 32, 0.08)"
           />
         </View>

@@ -74,6 +74,9 @@ func (r *RoleRepo) ListByScope(ctx context.Context, scopeType model.ScopeType, s
 		}
 		roles = append(roles, &role)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, domainErr.New(domainErr.ErrInternal, "failed to list roles", err)
+	}
 	return roles, nil
 }
 
@@ -136,6 +139,9 @@ func (r *RoleRepo) GetPermissions(ctx context.Context, roleID uuid.UUID) ([]stri
 		}
 		perms = append(perms, p)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, domainErr.New(domainErr.ErrInternal, "failed to get permissions", err)
+	}
 	return perms, nil
 }
 
@@ -185,6 +191,9 @@ func (r *RoleRepo) GetUserRoles(ctx context.Context, userID, orgID uuid.UUID) ([
 		}
 		userRoles = append(userRoles, &ur)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, domainErr.New(domainErr.ErrInternal, "failed to get user roles", err)
+	}
 	return userRoles, nil
 }
 
@@ -207,6 +216,9 @@ func (r *RoleRepo) GetUserPermissions(ctx context.Context, userID, orgID uuid.UU
 			return nil, domainErr.New(domainErr.ErrInternal, "failed to scan permission", err)
 		}
 		perms = append(perms, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, domainErr.New(domainErr.ErrInternal, "failed to get user permissions", err)
 	}
 	return perms, nil
 }

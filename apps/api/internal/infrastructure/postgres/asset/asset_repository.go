@@ -147,6 +147,9 @@ func (r *AssetRepo) ListPermissions(ctx context.Context, assetID uuid.UUID) ([]m
 		}
 		out = append(out, p)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, domainErr.New(domainErr.ErrInternal, "failed to iterate permissions", err)
+	}
 	return out, nil
 }
 
@@ -189,6 +192,9 @@ func (r *AssetRepo) scanAssetRows(rows pgx.Rows) ([]*model.Asset, error) {
 			return nil, domainErr.New(domainErr.ErrInternal, "failed to scan asset row", err)
 		}
 		out = append(out, &a)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, domainErr.New(domainErr.ErrInternal, "failed to iterate asset rows", err)
 	}
 	return out, nil
 }

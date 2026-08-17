@@ -24,6 +24,18 @@ type TokenPair = { token: string; refreshToken: string };
 let onSessionTokensRefreshed: ((tokens: TokenPair) => void) | null = null;
 
 /**
+ * The active session's tokens, set by AuthContext on sign-in, refresh, and
+ * sign-out. Request helpers fall back to this when a call doesn't pass an
+ * explicit token, so callers no longer need to thread the token through
+ * every API function by hand.
+ */
+let currentSession: { token: string; refreshToken?: string } | null = null;
+
+export function setCurrentSession(session: { token: string; refreshToken?: string } | null) {
+  currentSession = session;
+}
+
+/**
  * Raised when the request never reached the server. Carries code 0 so callers
  * can tell a connectivity failure apart from an API rejection. The base URL is
  * only appended in development — it is an internal address and means nothing
@@ -101,12 +113,48 @@ async function resolveRefreshToken(explicit?: string | null): Promise<string | n
 }
 
 async function persistRefreshedTokens(tokens: TokenPair, notify?: RequestOptions["onTokenRefreshed"]) {
+  currentSession = tokens;
   const session = await loadStoredSession();
   if (session) {
     await persistSession({ ...session, token: tokens.token, refreshToken: tokens.refreshToken });
   }
   notify?.(tokens);
   onSessionTokensRefreshed?.(tokens);
+}
+
+function doRefresh(
+  explicitRefreshToken: string | null | undefined,
+  notify?: RequestOptions["onTokenRefreshed"],
+): Promise<TokenPair | null> {
+  return (async () => {
+    const refreshToken = await resolveRefreshToken(explicitRefreshToken);
+    if (!refreshToken) return null;
+    const refreshed = await refreshAuthToken(refreshToken);
+    const tokens = { token: refreshed.token, refreshToken: refreshed.refresh_token };
+    await persistRefreshedTokens(tokens, notify);
+    return tokens;
+  })();
+}
+
+let refreshInFlight: Promise<TokenPair | null> | null = null;
+
+/**
+ * Collapses concurrent 401s into a single refresh call. Without this, N
+ * parallel requests (useTodayDashboard fires 8) each kick off their own
+ * refresh; with rotating refresh tokens the first response invalidates the
+ * token the other N-1 are about to submit, and the user gets logged out
+ * mid-session even though their session was actually still valid.
+ */
+function refreshTokensOnce(
+  explicitRefreshToken: string | null | undefined,
+  notify?: RequestOptions["onTokenRefreshed"],
+): Promise<TokenPair | null> {
+  if (!refreshInFlight) {
+    refreshInFlight = doRefresh(explicitRefreshToken, notify).finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -126,17 +174,20 @@ async function requestWithRefresh<T>(
     headers["Content-Type"] = "application/json";
   }
 
-  if (options.token) {
-    headers.Authorization = `Bearer ${options.token}`;
+  const token = options.token ?? currentSession?.token;
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    method: options.method ?? (options.body !== undefined ? "POST" : "GET"),
-    headers,
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-  }).catch(() => {
-    throw networkError();
-  });
+  const response = await fetchWithTimeout(
+    `${getApiBaseUrl()}${path}`,
+    {
+      method: options.method ?? (options.body !== undefined ? "POST" : "GET"),
+      headers,
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    },
+    REQUEST_TIMEOUT_MS,
+  );
 
   const text = await response.text();
   let payload: Record<string, unknown> = {};
@@ -150,24 +201,20 @@ async function requestWithRefresh<T>(
 
   const canRefresh = response.status === 401 && !retried && !path.includes("/auth/refresh");
   if (canRefresh) {
-    const refreshToken = await resolveRefreshToken(options.refreshToken);
-    if (refreshToken) {
-      try {
-        const refreshed = await refreshAuthToken(refreshToken);
-        const tokens = { token: refreshed.token, refreshToken: refreshed.refresh_token };
-        await persistRefreshedTokens(tokens, options.onTokenRefreshed);
-        return requestWithRefresh(
-          path,
-          {
-            ...options,
-            token: tokens.token,
-            refreshToken: tokens.refreshToken,
-          },
-          true,
-        );
-      } catch {
-        // fall through to error handling
-      }
+    const tokens = await refreshTokensOnce(
+      options.refreshToken ?? currentSession?.refreshToken,
+      options.onTokenRefreshed,
+    ).catch(() => null);
+    if (tokens) {
+      return requestWithRefresh(
+        path,
+        {
+          ...options,
+          token: tokens.token,
+          refreshToken: tokens.refreshToken,
+        },
+        true,
+      );
     }
   }
 
@@ -184,34 +231,33 @@ async function requestWithRefresh<T>(
 
 export async function apiUpload<T>(
   path: string,
-  token: string,
   formData: FormData,
+  token?: string | null,
   refreshToken?: string | null,
   onTokenRefreshed?: RequestOptions["onTokenRefreshed"],
   _retried = false,
 ): Promise<T> {
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${token}`,
+  const activeToken = token ?? currentSession?.token;
+  const response = await fetchWithTimeout(
+    `${getApiBaseUrl()}${path}`,
+    {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        ...(activeToken ? { Authorization: `Bearer ${activeToken}` } : {}),
+      },
+      body: formData,
     },
-    body: formData,
-  }).catch(() => {
-    throw networkError();
-  });
+    UPLOAD_TIMEOUT_MS,
+  );
 
   if (response.status === 401 && !_retried) {
-    const sessionRefresh = await resolveRefreshToken(refreshToken);
-    if (sessionRefresh) {
-      try {
-        const refreshed = await refreshAuthToken(sessionRefresh);
-        const tokens = { token: refreshed.token, refreshToken: refreshed.refresh_token };
-        await persistRefreshedTokens(tokens, onTokenRefreshed);
-        return apiUpload(path, refreshed.token, formData, refreshed.refresh_token, onTokenRefreshed, true);
-      } catch {
-        // fall through to error handling
-      }
+    const tokens = await refreshTokensOnce(
+      refreshToken ?? currentSession?.refreshToken,
+      onTokenRefreshed,
+    ).catch(() => null);
+    if (tokens) {
+      return apiUpload(path, formData, tokens.token, tokens.refreshToken, onTokenRefreshed, true);
     }
   }
 

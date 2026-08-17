@@ -93,7 +93,11 @@ func (r *AuditRepo) ListByResource(ctx context.Context, resourceType, resourceID
 	return r.scanLogs(rows, total)
 }
 
-func (r *AuditRepo) scanLogs(rows interface{ Next() bool; Scan(dest ...interface{}) error }, total int) ([]*model.AuditLog, int, error) {
+func (r *AuditRepo) scanLogs(rows interface {
+	Next() bool
+	Scan(dest ...interface{}) error
+	Err() error
+}, total int) ([]*model.AuditLog, int, error) {
 	var logs []*model.AuditLog
 	for rows.Next() {
 		var l model.AuditLog
@@ -103,6 +107,9 @@ func (r *AuditRepo) scanLogs(rows interface{ Next() bool; Scan(dest ...interface
 			return nil, 0, domainErr.New(domainErr.ErrInternal, "failed to scan audit log", err)
 		}
 		logs = append(logs, &l)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, domainErr.New(domainErr.ErrInternal, "failed to iterate audit logs", err)
 	}
 	return logs, total, nil
 }

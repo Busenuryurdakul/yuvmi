@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Screen } from "@/components/ui/Screen";
 import { Button } from "@/components/ui/Button";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
+import { alert } from "@/lib/alert";
 import { Eyebrow } from "@/components/ui/Glass";
 import { useAuth } from "@/context/AuthContext";
 import { completeTask, fetchTodayTask, skipTask } from "@/lib/api/yuvmi";
@@ -20,20 +21,20 @@ export default function TaskDetailScreen() {
 
   useEffect(() => {
     if (!user?.token) return;
-    fetchTodayTask(user.token)
+    fetchTodayTask()
       .then((t) => setTask(t.id === id ? t : t))
-      .catch(() => Alert.alert("Hata", "Görev yüklenemedi."))
+      .catch(() => alert("Hata", "Görev yüklenemedi."))
       .finally(() => setLoading(false));
   }, [user?.token, id]);
 
   async function act(action: "complete" | "skip") {
     if (!user?.token || !task) return;
     try {
-      if (action === "complete") await completeTask(user.token, task.id);
-      else await skipTask(user.token, task.id);
+      if (action === "complete") await completeTask(task.id);
+      else await skipTask(task.id);
       router.back();
     } catch (e) {
-      Alert.alert("Hata", e instanceof Error ? e.message : "İşlem başarısız.");
+      alert("Hata", e instanceof Error ? e.message : "İşlem başarısız.");
     }
   }
 

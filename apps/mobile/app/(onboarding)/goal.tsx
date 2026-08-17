@@ -1,10 +1,11 @@
 import { useCallback, useMemo, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { type LifeDomain } from "@yuvmi/shared";
 import { Screen } from "@/components/ui/Screen";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Stepper } from "@/components/ui/Stepper";
+import { alert } from "@/lib/alert";
 import { Button } from "@/components/ui/Button";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { FutureSelfExpandableCard } from "@/components/future-self/FutureSelfExpandableCard";
@@ -83,8 +84,8 @@ export default function OnboardingGoalScreen() {
     setInitializing(true);
     try {
       const [fsResult, goalResult] = await Promise.allSettled([
-        fetchFutureSelf(user.token),
-        fetchCurrentGoal(user.token),
+        fetchFutureSelf(),
+        fetchCurrentGoal(),
       ]);
       if (fsResult.status === "fulfilled") setFutureSelf(fsResult.value);
       else setFutureSelf(null);
@@ -111,7 +112,7 @@ export default function OnboardingGoalScreen() {
     if (!user?.token || !title.trim()) {
       const message = "Hedef başlığı gerekli.";
       setError(message);
-      Alert.alert("Eksik bilgi", message);
+      alert("Eksik bilgi", message);
       return;
     }
     setError(null);
@@ -120,19 +121,19 @@ export default function OnboardingGoalScreen() {
       if (!deadlineSkipped && deadlineMode === "duration" && !durationText.trim()) {
         const message = "Bir süre yaz — örn. 3 ay — veya esnek ilerlemeyi seç.";
         setError(message);
-        Alert.alert("Hedef tarihi", message);
+        alert("Hedef tarihi", message);
         return;
       }
       if (!deadlineSkipped && deadlineMode === "duration" && durationText.trim() && !parseDurationToTargetDate(durationText)) {
         const message = "Süreyi anlayamadım. Örn: 3 ay, 6 hafta veya 90 gün.";
         setError(message);
-        Alert.alert("Süre", message);
+        alert("Süre", message);
         return;
       }
       if (!deadlineSkipped && deadlineMode === "date" && !targetDate.trim()) {
         const message = "Bir tarih seç veya süre yaz — ya da esnek ilerlemeyi işaretle.";
         setError(message);
-        Alert.alert("Hedef tarihi", message);
+        alert("Hedef tarihi", message);
         return;
       }
 
@@ -142,7 +143,7 @@ export default function OnboardingGoalScreen() {
         targetDate.trim(),
         durationText.trim(),
       );
-      const fs = futureSelf ?? (await fetchFutureSelf(user.token));
+      const fs = futureSelf ?? (await fetchFutureSelf());
       const payload = {
         futureSelfId: fs.id,
         title: title.trim(),
@@ -152,13 +153,13 @@ export default function OnboardingGoalScreen() {
 
       let goal: GoalResponse;
       if (existingGoal) {
-        goal = await updateGoal(user.token, payload);
+        goal = await updateGoal(payload);
       } else {
         try {
-          goal = await createGoal(user.token, payload);
+          goal = await createGoal(payload);
         } catch (err) {
           if (err instanceof ApiError && (err.code === 402 || err.code === 409)) {
-            goal = await updateGoal(user.token, payload);
+            goal = await updateGoal(payload);
           } else {
             throw err;
           }
@@ -171,7 +172,7 @@ export default function OnboardingGoalScreen() {
       if (!promptPremiumUpsell(err, { feature: "Ek hedef oluşturma" })) {
         const message = err instanceof Error ? err.message : "Bir hata oluştu.";
         setError(message);
-        Alert.alert("Kaydedilemedi", message);
+        alert("Kaydedilemedi", message);
       }
     } finally {
       setLoading(false);

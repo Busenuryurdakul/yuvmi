@@ -115,5 +115,8 @@ func (r *OrgRepo) List(ctx context.Context, offset, limit int) ([]*model.Organiz
 		}
 		orgs = append(orgs, &o)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, domainErr.New(domainErr.ErrInternal, "failed to list organizations", err)
+	}
 	return orgs, total, nil
 }

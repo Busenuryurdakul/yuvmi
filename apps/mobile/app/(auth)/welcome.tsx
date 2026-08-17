@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { APP_NAME, APP_TAGLINE } from "@yuvmi/shared";
@@ -7,15 +7,8 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { AmbientBackground, Glass } from "@/components/ui/Glass";
 import { useAuth } from "@/context/AuthContext";
+import { alert as showMessage } from "@/lib/alert";
 import { theme } from "@/theme";
-
-function showMessage(title: string, message: string) {
-  if (typeof window !== "undefined" && typeof window.alert === "function") {
-    window.alert(`${title}\n\n${message}`);
-    return;
-  }
-  Alert.alert(title, message);
-}
 
 export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();

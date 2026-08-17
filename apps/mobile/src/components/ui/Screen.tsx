@@ -67,6 +67,7 @@ export function Screen({
 const styles = StyleSheet.create({
   fill: {
     flex: 1,
+    overflow: "hidden",
   },
   foreground: {
     flex: 1,

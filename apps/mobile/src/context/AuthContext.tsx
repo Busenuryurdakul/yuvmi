@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ApiError, setSessionTokenListener } from "@/lib/api/client";
+import { ApiError, setCurrentSession, setSessionTokenListener } from "@/lib/api/client";
 import {
   fetchMe,
   loginUser,
@@ -27,6 +27,8 @@ import {
   loadStoredSession,
   persistSession,
 } from "@/lib/auth/session";
+import { clearLocalUserData } from "@/lib/local";
+import { resetPushRegistration } from "@/hooks/usePushNotifications";
 import {
   AUTH_STORAGE_KEY,
   DEV_OAUTH_PASSWORD,
@@ -94,7 +96,8 @@ async function devBridgeSignIn(input: {
       throw error;
     }
   }
-  const profile = await fetchMe(login.token);
+  setCurrentSession({ token: login.token, refreshToken: login.refresh_token });
+  const profile = await fetchMe();
   return toAuthUser(login, profile, input.provider, input.displayName);
 }
 
@@ -129,8 +132,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsLoading(false);
         return;
       }
+      setCurrentSession({ token: session.token, refreshToken: session.refreshToken });
       try {
-        const profile = await fetchMe(session.token);
+        const profile = await fetchMe();
+        if (!mounted) return;
         setUser({
           ...session,
           id: profile.id,
@@ -142,16 +147,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (session.refreshToken) {
           try {
             const refreshed = await refreshAuthToken(session.refreshToken);
-            const profile = await fetchMe(refreshed.token);
+            setCurrentSession({ token: refreshed.token, refreshToken: refreshed.refresh_token });
+            const profile = await fetchMe();
             const next = toAuthUser(refreshed, profile, session.provider, session.displayName);
             await persistSession(next);
-            setUser(next);
-            if (mounted) setIsLoading(false);
+            if (mounted) {
+              setUser(next);
+              setIsLoading(false);
+            }
             return;
           } catch {
             // fall through
           }
         }
+        setCurrentSession(null);
         await clearStoredSession();
       } finally {
         if (mounted) setIsLoading(false);
@@ -192,7 +201,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
         const login = await loginUser(input.email, input.password);
-        const profile = await fetchMe(login.token);
+        setCurrentSession({ token: login.token, refreshToken: login.refresh_token });
+        const profile = await fetchMe();
         await completeSignIn(
           toAuthUser(
             login,
@@ -238,7 +248,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         firstName: result.user.displayName.split(" ")[0],
         lastName: result.user.displayName.split(" ").slice(1).join(" "),
       });
-      const profile = await fetchMe(login.token);
+      setCurrentSession({ token: login.token, refreshToken: login.refresh_token });
+      const profile = await fetchMe();
       await completeSignIn(toAuthUser(login, profile, "google", result.user.displayName));
       return { ok: true };
     } catch (error) {
@@ -274,7 +285,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         firstName: result.user.displayName.split(" ")[0],
         lastName: result.user.displayName.split(" ").slice(1).join(" "),
       });
-      const profile = await fetchMe(login.token);
+      setCurrentSession({ token: login.token, refreshToken: login.refresh_token });
+      const profile = await fetchMe();
       await completeSignIn(toAuthUser(login, profile, "apple", result.user.displayName));
       return { ok: true };
     } catch (error) {
@@ -285,7 +297,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshProfile = useCallback(async () => {
     if (!user?.token) return;
-    const profile = await fetchMe(user.token);
+    const profile = await fetchMe();
     const next = { ...user, onboardingComplete: profile.onboardingComplete, displayName: profile.displayName };
     await persistSession(next);
     setUser(next);
@@ -299,6 +311,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const signOut = useCallback(async () => {
+    // Cihazda kalan kişisel veri (ruh hâli geçmişi, vizyon panosu, mektup,
+    // bekleyen çevrimdışı kuyruk, bildirim tercihleri) bir sonraki kullanıcıya
+    // görünmesin. Temizlik başarısız olsa bile çıkışı tamamlıyoruz — aksi
+    // hâlde kullanıcı oturumunu hiç kapatamaz.
+    try {
+      await clearLocalUserData();
+    } catch (error) {
+      console.warn("[auth] yerel kullanıcı verisi temizlenemedi:", error);
+    }
+    // Yeni hesapla girildiğinde push token'ın yeniden kaydedilmesi için.
+    resetPushRegistration();
+    setCurrentSession(null);
     await clearStoredSession();
     setUser(null);
   }, []);

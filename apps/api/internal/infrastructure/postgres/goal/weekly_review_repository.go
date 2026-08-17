@@ -42,6 +42,9 @@ func (r *WeeklyReviewRepo) List(ctx context.Context, userID uuid.UUID, limit int
 		}
 		out = append(out, wr)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, domainErr.New(domainErr.ErrInternal, "failed to list weekly reviews", err)
+	}
 	return out, nil
 }
 

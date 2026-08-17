@@ -1,4 +1,4 @@
-import { Alert, StyleSheet, Text, TextInput } from "react-native";
+import { StyleSheet, Text, TextInput } from "react-native";
 import { router } from "expo-router";
 import { useState } from "react";
 import { Screen } from "@/components/ui/Screen";
@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { useAuth } from "@/context/AuthContext";
 import { deleteAccount } from "@/lib/api/yuvmi";
 import { ApiError } from "@/lib/api/client";
+import { alert } from "@/lib/alert";
 import { theme } from "@/theme";
 
 export default function DeleteAccountScreen() {
@@ -20,7 +21,7 @@ export default function DeleteAccountScreen() {
   const needsPassword = user.provider === "email";
 
   async function handleDelete() {
-    Alert.alert(
+    alert(
       "Hesabı sil",
       "Tüm verilerin kalıcı olarak silinecek. Bu işlem geri alınamaz.",
       [
@@ -38,12 +39,12 @@ export default function DeleteAccountScreen() {
     if (!user?.token) return;
     setLoading(true);
     try {
-      await deleteAccount(user.token, needsPassword ? password : undefined);
+      await deleteAccount(needsPassword ? password : undefined);
       await signOut();
       router.replace("/(auth)/welcome");
     } catch (error) {
       const message = error instanceof ApiError ? error.message : "Silme başarısız.";
-      Alert.alert("Hata", message);
+      alert("Hata", message);
     } finally {
       setLoading(false);
     }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { FlatList, NativeScrollEvent, NativeSyntheticEvent, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { router, useFocusEffect, type Href } from "expo-router";
 import { AmbientBackground, Eyebrow } from "@/components/ui/Glass";
 import { SubpageBar } from "@/components/ui/SubpageBar";
@@ -28,7 +28,7 @@ export default function AffirmationsScreen() {
     let mine: Card[] = extra.map((a) => ({ text: a.text, who: a.who }));
     if (user?.token) {
       try {
-        const profile = await fetchFutureSelf(user.token);
+        const profile = await fetchFutureSelf();
         mine = [
           ...profile.affirmations.map((t) => ({ text: t, who: "Senin olumlaman" })),
           ...extra.map((a) => ({ text: a.text, who: a.who })),
@@ -61,21 +61,22 @@ export default function AffirmationsScreen() {
     <View style={styles.root}>
       <AmbientBackground />
       <SubpageBar title="Olumlamalar" right={`${index + 1} / ${Math.max(cards.length, 1)}`} />
-      <ScrollView
+      <FlatList
+        data={cards}
+        keyExtractor={(card) => `${card.who}-${card.text}`}
         pagingEnabled
         snapToInterval={paneH}
         decelerationRate="fast"
         showsVerticalScrollIndicator={false}
         onMomentumScrollEnd={onScroll}
         style={styles.deck}
-      >
-        {cards.map((card) => (
-          <View key={`${card.who}-${card.text}`} style={[styles.aff, { height: paneH }]}>
+        renderItem={({ item: card }) => (
+          <View style={[styles.aff, { height: paneH }]}>
             <Text style={styles.quote}>{card.text}</Text>
             <Eyebrow style={styles.who}>{card.who}</Eyebrow>
           </View>
-        ))}
-      </ScrollView>
+        )}
+      />
       <Text style={styles.hint}>↑ kaydır</Text>
       <Pressable style={styles.fab} onPress={() => router.push("/vision/affirmation-new" as Href)}>
         <Text style={styles.fabText}>+</Text>

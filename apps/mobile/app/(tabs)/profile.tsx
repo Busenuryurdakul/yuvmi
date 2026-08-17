@@ -1,17 +1,17 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Alert, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import Constants from "expo-constants";
 import { Screen } from "@/components/ui/Screen";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Eyebrow, Glass } from "@/components/ui/Glass";
-import { Switch } from "@/components/ui/Switch";
 import { useAuth } from "@/context/AuthContext";
 import { useMode } from "@/context/ModeContext";
 import { useSubscription } from "@/hooks/useSubscription";
 import { exportUserData, fetchActiveGoal, fetchActivePlan, fetchMe, fetchMyAssets, fetchPlans } from "@/lib/api/yuvmi";
 import type { GoalResponse, PlanResponse } from "@/lib/api/types";
 import type { UserMode } from "@/lib/local";
+import { alert } from "@/lib/alert";
 import { theme } from "@/theme";
 
 function initials(name: string): string {
@@ -19,6 +19,15 @@ function initials(name: string): string {
   if (parts.length === 0) return "?";
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
+}
+
+/** Henüz bağlanmamış ayarların yanına konur — bkz. teknik denetim raporu, madde D1. */
+function ComingSoonBadge() {
+  return (
+    <View style={styles.soonBadge}>
+      <Text style={styles.soonBadgeText}>Yakında</Text>
+    </View>
+  );
 }
 
 function Kv({
@@ -40,12 +49,18 @@ function Kv({
       {right ?? <Text style={styles.kvValue}>{value}</Text>}
     </View>
   );
-  return onPress ? <Pressable onPress={onPress}>{inner}</Pressable> : inner;
+  return onPress ? (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}>
+      {inner}
+    </Pressable>
+  ) : (
+    inner
+  );
 }
 
 export default function ProfileScreen() {
   const { user, signOut } = useAuth();
-  const { mode, hard, setMode, prefs, patchPrefs } = useMode();
+  const { mode, hard, setMode } = useMode();
   const { isPremium, loading: subLoading } = useSubscription();
   const [goal, setGoal] = useState<GoalResponse | null>(null);
   const [plan, setPlan] = useState<PlanResponse | null>(null);
@@ -55,13 +70,15 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     if (!user?.token) return;
+    let mounted = true;
     Promise.allSettled([
-      fetchActiveGoal(user.token),
-      fetchActivePlan(user.token),
-      fetchPlans(user.token),
-      fetchMe(user.token),
-      fetchMyAssets(user.token),
+      fetchActiveGoal(),
+      fetchActivePlan(),
+      fetchPlans(),
+      fetchMe(),
+      fetchMyAssets(),
     ]).then(([g, p, pl, me, assets]) => {
+      if (!mounted) return;
       setGoal(g.status === "fulfilled" ? g.value : null);
       setPlan(p.status === "fulfilled" ? p.value : null);
       setReturns(pl.status === "fulfilled" ? pl.value.filter((x) => x.status === "superseded").length : 0);
@@ -71,6 +88,9 @@ export default function ProfileScreen() {
       }
       setAssetCount(assets.status === "fulfilled" ? assets.value.length : 0);
     });
+    return () => {
+      mounted = false;
+    };
   }, [user?.token]);
 
   function confirmMode(next: UserMode) {
@@ -80,32 +100,27 @@ export default function ProfileScreen() {
       next === "hard"
         ? "Seri tutulur ve kaçırılan gün açıkça görünür. Minimum hâl seriyi sürdürür; ruh hâlin puan düşürmez. Verin aynı kalır."
         : "Seri gösterimi kapanır; yerine dolu gün ve geri dönüş sayısı gelir. Kaçırılan günler kayıt olarak durur, ama ceza gibi görünmez.";
-    if (Platform.OS === "web") {
-      const ok = window.confirm(`${title}\n\n${body}`);
-      if (ok) void setMode(next);
-    } else {
-      Alert.alert(title, body, [
-        { text: "Vazgeç", style: "cancel" },
-        {
-          text: "Geç",
-          onPress: () => void setMode(next),
-        },
-      ]);
-    }
+    alert(title, body, [
+      { text: "Vazgeç", style: "cancel" },
+      {
+        text: "Geç",
+        onPress: () => void setMode(next),
+      },
+    ]);
   }
 
   async function handleExport() {
     if (!user?.token) return;
     try {
-      const data = await exportUserData(user.token);
-      Alert.alert("Dışa aktarma hazır", data.filename);
+      const data = await exportUserData();
+      alert("Dışa aktarma hazır", data.filename);
     } catch (e) {
-      Alert.alert("Hata", e instanceof Error ? e.message : "Dışa aktarılamadı.");
+      alert("Hata", e instanceof Error ? e.message : "Dışa aktarılamadı.");
     }
   }
 
   function handleSignOut() {
-    Alert.alert("Çıkış yap", "Oturumunu kapatmak istediğine emin misin?", [
+    alert("Çıkış yap", "Oturumunu kapatmak istediğine emin misin?", [
       { text: "Vazgeç", style: "cancel" },
       { text: "Çıkış yap", style: "destructive", onPress: () => void signOut() },
     ]);
@@ -134,6 +149,9 @@ export default function ProfileScreen() {
         <Eyebrow style={styles.lbl}>Kullanım modu</Eyebrow>
         <View style={styles.modes}>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Nazik mod"
+            accessibilityState={{ selected: !hard }}
             onPress={() => confirmMode("soft")}
             style={[styles.mode, !hard && styles.modeOn]}
           >
@@ -141,6 +159,9 @@ export default function ProfileScreen() {
             <Text style={styles.modeSub}>Seri yok, suçluluk yok. Geri dönüş başarı sayılır.</Text>
           </Pressable>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Disiplin modu"
+            accessibilityState={{ selected: hard }}
             onPress={() => confirmMode("hard")}
             style={[styles.mode, hard && styles.modeOn]}
           >
@@ -156,21 +177,9 @@ export default function ProfileScreen() {
 
       <Glass style={styles.stat}>
         <Eyebrow style={styles.lbl}>Zor zamanlar</Eyebrow>
-        <Kv
-          label="🚨 Hayatta kalma modu"
-          last
-          right={
-            <Switch
-              value={Boolean(prefs?.survivalMode)}
-              onValueChange={(v) => void patchPrefs({ survivalMode: v })}
-              trackColor={{ false: "rgba(11, 18, 32, 0.12)", true: theme.color.blue }}
-              thumbColor="#ffffff"
-              ios_backgroundColor="rgba(11, 18, 32, 0.08)"
-            />
-          }
-        />
+        <Kv label="🚨 Hayatta kalma modu" last right={<ComingSoonBadge />} />
         <Text style={styles.hint}>
-          Hastalık, yas veya burnout'ta planın dondurulur. Ritmin hasar görmüş sayılmaz.
+          Yakında: hastalık, yas veya burnout dönemlerinde planını duraklatabileceksin.
         </Text>
       </Glass>
 
@@ -184,52 +193,18 @@ export default function ProfileScreen() {
 
       <Glass style={styles.stat}>
         <Eyebrow style={styles.lbl}>Hatırlatmalar</Eyebrow>
-        <Kv label="Sabah hatırlatması" value={prefs?.morningReminder ?? "08:00"} />
-        <Kv label="Akşam kapanışı" value={prefs?.eveningReminder ?? "21:30"} />
-        <Kv
-          label="Sessiz hafta"
-          last
-          right={
-            <Switch
-              value={Boolean(prefs?.quietWeek)}
-              onValueChange={(v) => void patchPrefs({ quietWeek: v })}
-              trackColor={{ false: "rgba(11, 18, 32, 0.12)", true: theme.color.blue }}
-              thumbColor="#ffffff"
-              ios_backgroundColor="rgba(11, 18, 32, 0.08)"
-            />
-          }
-        />
-        <Text style={styles.hint}>Sessiz hafta açıkken bildirim gelmez, ritmin de bozulmuş sayılmaz.</Text>
+        <Kv label="Sabah hatırlatması" right={<ComingSoonBadge />} />
+        <Kv label="Akşam kapanışı" right={<ComingSoonBadge />} />
+        <Kv label="Sessiz hafta" last right={<ComingSoonBadge />} />
+        <Text style={styles.hint}>
+          Yakında: hatırlatma saatlerini ve sessiz hafta ayarını buradan yönetebileceksin.
+        </Text>
       </Glass>
 
       <Glass style={styles.stat}>
         <Eyebrow style={styles.lbl}>Görünüm ve gizlilik</Eyebrow>
-        <Kv
-          label="Karanlık mod"
-          right={
-            <Switch
-              value={Boolean(prefs?.darkMode)}
-              onValueChange={(v) => void patchPrefs({ darkMode: v })}
-              trackColor={{ false: "rgba(11, 18, 32, 0.12)", true: theme.color.blue }}
-              thumbColor="#ffffff"
-              ios_backgroundColor="rgba(11, 18, 32, 0.08)"
-            />
-          }
-        />
-        <Kv
-          label="Uygulama kilidi"
-          right={
-            <Switch
-              value={prefs ? prefs.appLock : true}
-              onValueChange={(v) => void patchPrefs({ appLock: v })}
-              trackColor={{ false: "rgba(11, 18, 32, 0.12)", true: theme.color.blue }}
-              thumbColor="#ffffff"
-              ios_backgroundColor="rgba(11, 18, 32, 0.08)"
-            />
-          }
-        />
-        <Kv label="Ana ekran widget'ı" value="açık" />
-        <Kv label="Dil" value="Türkçe" last />
+        <Kv label="Karanlık mod" right={<ComingSoonBadge />} />
+        <Kv label="Uygulama kilidi" last right={<ComingSoonBadge />} />
       </Glass>
 
       <Glass style={styles.stat}>
@@ -244,27 +219,36 @@ export default function ProfileScreen() {
         />
       </Glass>
 
+      {/*
+        TODO(yayın öncesi): Gizlilik politikası ve destek/geri bildirim için
+        gerçek, yayınlanmış URL'ler gerekiyor (App Store / Play Store inceleme
+        şartı). URL'ler netleşince Linking.openURL ile bağla, alert'leri kaldır.
+      */}
       <Glass style={styles.stat}>
         <Eyebrow style={styles.lbl}>Destek</Eyebrow>
         <Kv
           label="Yardım ve geri bildirim"
           value="›"
-          onPress={() => Alert.alert("Yardım", "Geri bildirimin için teşekkürler — yakında burada olacak.")}
+          onPress={() => alert("Yardım ve geri bildirim", "Bu bölüm henüz hazırlanıyor.")}
         />
         <Kv
           label="Gizlilik politikası"
           value="›"
-          onPress={() => Alert.alert("Gizlilik", "Verilerin varsayılan olarak özeldir.")}
+          onPress={() => alert("Gizlilik politikası", "Gizlilik politikası metni henüz yayınlanmadı.")}
         />
         <Kv label="Sürüm" value={`${version} · v8`} last />
       </Glass>
 
       <Glass style={styles.signout}>
-        <Pressable onPress={handleSignOut} style={styles.center}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Çıkış yap" onPress={handleSignOut} style={styles.center}>
           <Text style={styles.kvLabel}>Çıkış yap</Text>
         </Pressable>
       </Glass>
-      <Pressable onPress={() => router.push("/settings/delete-account")}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Hesabı sil"
+        onPress={() => router.push("/settings/delete-account")}
+      >
         <Text style={styles.danger}>Hesabı sil</Text>
       </Pressable>
     </Screen>
@@ -304,7 +288,7 @@ const styles = StyleSheet.create({
   email: {
     fontFamily: theme.font.sans,
     fontSize: 12.5,
-    color: theme.color.ink40,
+    color: theme.color.ink70,
     marginTop: 2,
   },
   stat: {
@@ -358,14 +342,29 @@ const styles = StyleSheet.create({
   kvValue: {
     fontFamily: theme.font.mono,
     fontSize: 12.5,
-    color: theme.color.ink40,
+    color: theme.color.ink70,
   },
   hint: {
     marginTop: 10,
     fontFamily: theme.font.sans,
     fontSize: 11.5,
-    color: theme.color.ink40,
+    color: theme.color.ink70,
     lineHeight: 16,
+  },
+  soonBadge: {
+    borderRadius: 999,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    backgroundColor: "rgba(11,18,32,0.06)",
+    borderWidth: 1,
+    borderColor: theme.color.ink15,
+  },
+  soonBadgeText: {
+    fontFamily: theme.font.mono,
+    fontSize: 10,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    color: theme.color.ink40,
   },
   signout: { paddingVertical: 6, paddingHorizontal: 16 },
   center: { paddingVertical: 12, alignItems: "center" },

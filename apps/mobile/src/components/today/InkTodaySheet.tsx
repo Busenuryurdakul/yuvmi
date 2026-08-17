@@ -115,7 +115,7 @@ const styles = StyleSheet.create({
     color: theme.color.onInk,
   },
   stamp: {
-    backgroundColor: theme.color.accent,
+    backgroundColor: theme.color.blue,
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 6,
@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
     marginBottom: theme.space.md,
   },
   error: {
-    color: theme.color.accent,
+    color: theme.color.blue,
     fontSize: theme.font.size.sm,
     marginBottom: 4,
   },
@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
   check: {
     width: 18,
     fontSize: 14,
-    color: theme.color.inkMuted,
+    color: theme.color.ink40,
   },
   checkDone: {
     color: theme.color.onInkMuted,

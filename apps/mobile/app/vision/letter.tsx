@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from "react";
-import { Alert, Pressable, StyleSheet, Text, TextInput, View, ScrollView, Animated } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View, ScrollView, Animated } from "react-native";
 import { router } from "expo-router";
 import { Screen } from "@/components/ui/Screen";
 import { SubpageBar } from "@/components/ui/SubpageBar";
 import { Eyebrow, Glass } from "@/components/ui/Glass";
 import { useMode } from "@/context/ModeContext";
+import { alert } from "@/lib/alert";
 import { theme } from "@/theme";
 
 type Letter = {
@@ -119,7 +120,7 @@ export default function LetterScreen() {
 
   function handleOpenLetter(letter: Letter) {
     if (letter.status === "locked") {
-      Alert.alert(
+      alert(
         "Mektup Mühürlü",
         `Bu mektubun açılmasına daha ${letter.daysLeft} gün var. Erken açmak için 5 İnci harcamak ister misin?`,
         [
@@ -128,7 +129,7 @@ export default function LetterScreen() {
             text: "Erken Aç (5 İnci)",
             onPress: async () => {
               if (tohum < 5) {
-                Alert.alert("Yetersiz İnci 🫧", "Erken açmak için 5 İnci gerekir.");
+                alert("Yetersiz İnci 🫧", "Erken açmak için 5 İnci gerekir.");
                 return;
               }
               await patchPrefs({ tohum: tohum - 5 });
@@ -156,7 +157,7 @@ export default function LetterScreen() {
 
   function handleSaveLetter() {
     if (!writeTitle.trim() || !writeBody.trim()) {
-      Alert.alert("Eksik", "Lütfen mektup başlığını ve içeriğini doldurun.");
+      alert("Eksik", "Lütfen mektup başlığını ve içeriğini doldurun.");
       return;
     }
 
@@ -171,14 +172,14 @@ export default function LetterScreen() {
     } else if (openDateMode === "days") {
       const parsed = parseInt(daysInput, 10);
       if (isNaN(parsed) || parsed <= 0) {
-        Alert.alert("Hata", "Lütfen geçerli bir gün sayısı girin.");
+        alert("Hata", "Lütfen geçerli bir gün sayısı girin.");
         return;
       }
       daysTotal = parsed;
       target.setDate(target.getDate() + daysTotal);
     } else {
       if (!selectedDate) {
-        Alert.alert("Eksik", "Lütfen takvimden bir tarih seçin.");
+        alert("Eksik", "Lütfen takvimden bir tarih seçin.");
         return;
       }
       target = new Date(selectedDate);
@@ -351,7 +352,7 @@ export default function LetterScreen() {
           <SubpageBar
             title="Mektup kutusu"
             right={
-              <Pressable style={styles.balance} onPress={() => router.push("/atolye/shop" as any)}>
+              <Pressable style={styles.balance} onPress={() => router.push("/atolye/shop")}>
                 <Text style={styles.balanceText}>🫧 {tohum}</Text>
               </Pressable>
             }
@@ -1181,7 +1182,7 @@ const styles = StyleSheet.create({
 
   // Animation Specific Styles
   animOverlay: {
-    ...StyleSheet.absoluteFill as any,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(11, 23, 44, 0.9)",
     zIndex: 9999,
     justifyContent: "center",

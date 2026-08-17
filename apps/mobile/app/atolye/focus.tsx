@@ -29,7 +29,7 @@ export default function FocusDiveScreen() {
   const [niyet, setNiyet] = useState(1);
   const [left, setLeft] = useState<number | null>(null);
   const [phase, setPhase] = useState<"idle" | "diving" | "done">("idle");
-  const [finds, setFinds] = useState<string[]>(["🐚 Deniz kabuğu", "🪸 Mercan", "🔑 Paslı anahtar"]);
+  const [finds, setFinds] = useState<string[]>([]);
   const [lastFind, setLastFind] = useState("");
   const diverPos = useRef(new Animated.Value(6)).current;
   const ref = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -37,8 +37,9 @@ export default function FocusDiveScreen() {
   useEffect(() => {
     return () => {
       if (ref.current) clearInterval(ref.current);
+      diverPos.stopAnimation();
     };
-  }, []);
+  }, [diverPos]);
 
   function start() {
     setPhase("diving");
@@ -51,7 +52,7 @@ export default function FocusDiveScreen() {
       toValue: 84,
       duration: total * 1000,
       easing: Easing.linear,
-      useNativeDriver: false,
+      useNativeDriver: true,
     }).start();
 
     ref.current = setInterval(() => {
@@ -92,7 +93,7 @@ export default function FocusDiveScreen() {
     setLastFind("");
   }
 
-  const diverTop = diverPos.interpolate({
+  const diverY = diverPos.interpolate({
     inputRange: [0, 100],
     outputRange: [6, 150],
   });
@@ -101,7 +102,7 @@ export default function FocusDiveScreen() {
     <SubpageScreen
       title="Odak dalışı"
       right={
-        <Pressable style={styles.balance} onPress={() => router.push("/atolye/shop" as any)}>
+        <Pressable style={styles.balance} onPress={() => router.push("/atolye/shop")}>
           <Text style={styles.balanceText}>🫧 {tohum}</Text>
         </Pressable>
       }
@@ -178,7 +179,7 @@ export default function FocusDiveScreen() {
             <View style={[styles.dline, { top: "66%" }]} />
             <Text style={[styles.dtag, { top: "64%" }]}>30 m · akış</Text>
             <Text style={[styles.dtag, { top: "92%" }]}>60 m · dip</Text>
-            <Animated.Text style={[styles.diver, { top: diverTop }]}>🤿</Animated.Text>
+            <Animated.Text style={[styles.diver, { transform: [{ translateY: diverY }] }]}>🤿</Animated.Text>
           </View>
         </View>
 
@@ -309,6 +310,7 @@ const styles = StyleSheet.create({
   },
   diver: {
     position: "absolute",
+    top: 0,
     left: "46%",
     fontSize: 24,
   },

@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { router, type Href } from "expo-router";
+import { useCallback, useState } from "react";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { router, useFocusEffect, type Href } from "expo-router";
 import { Screen } from "@/components/ui/Screen";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -8,14 +8,31 @@ import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { Eyebrow, Glass } from "@/components/ui/Glass";
 import { TapRow } from "@/components/ui/TapRow";
 import { SegmentBar } from "@/components/today/SegmentBar";
+import { SwipeableCard } from "@/components/today/SwipeableCard";
 import { useAuth } from "@/context/AuthContext";
-import { fetchActiveGoal, fetchActivePlan, fetchFutureSelf, fetchPlans, fetchTodayAlignment } from "@/lib/api/yuvmi";
+import { useMode } from "@/context/ModeContext";
+import {
+  fetchActiveGoal,
+  fetchActivePlan,
+  fetchFutureSelf,
+  fetchPlans,
+  fetchTodayAlignment,
+  recordWaveSurvived,
+  revisePlan,
+} from "@/lib/api/yuvmi";
 import type { AlignmentResponse, FutureSelfResponse, GoalResponse, PlanResponse } from "@/lib/api/types";
 import { loadWaves, saveWaves, type WaveItem } from "@/lib/local";
 import { shortStamp } from "@/lib/formatDate";
+import { alert } from "@/lib/alert";
 import { theme } from "@/theme";
 
 const JSEGS = ["Plan", "Plan sağlığı", "Geçmiş"] as const;
+
+const PLAN_STATUS_LABEL: Record<string, string> = {
+  active: "Aktif",
+  superseded: "Yerini yenisi aldı",
+  draft: "Taslak",
+};
 
 function healthCopy(alignment: AlignmentResponse | null) {
   if (!alignment) {
@@ -32,6 +49,7 @@ function healthCopy(alignment: AlignmentResponse | null) {
 
 export default function JourneyScreen() {
   const { user } = useAuth();
+  const { prefs, patchPrefs } = useMode();
   const [seg, setSeg] = useState(0);
   const [goal, setGoal] = useState<GoalResponse | null>(null);
   const [plan, setPlan] = useState<PlanResponse | null>(null);
@@ -44,25 +62,27 @@ export default function JourneyScreen() {
   const [adaptiveDone, setAdaptiveDone] = useState(false);
   const [newWave, setNewWave] = useState("");
 
-  useEffect(() => {
-    if (!user?.token) return;
-    Promise.allSettled([
-      fetchActiveGoal(user.token),
-      fetchActivePlan(user.token),
-      fetchPlans(user.token),
-      fetchTodayAlignment(user.token),
-      fetchFutureSelf(user.token),
-      loadWaves(),
-    ]).then(([g, p, pl, a, fs, w]) => {
-      setGoal(g.status === "fulfilled" ? g.value : null);
-      setPlan(p.status === "fulfilled" ? p.value : null);
-      setPlans(pl.status === "fulfilled" ? pl.value : []);
-      setAlignment(a.status === "fulfilled" ? a.value : null);
-      setFutureSelf(fs.status === "fulfilled" ? fs.value : null);
-      setWaves(w.status === "fulfilled" ? w.value : []);
-      setLoading(false);
-    });
-  }, [user?.token]);
+  useFocusEffect(
+    useCallback(() => {
+      if (!user?.token) return;
+      Promise.allSettled([
+        fetchActiveGoal(),
+        fetchActivePlan(),
+        fetchPlans(),
+        fetchTodayAlignment(),
+        fetchFutureSelf(),
+        loadWaves(),
+      ]).then(([g, p, pl, a, fs, w]) => {
+        setGoal(g.status === "fulfilled" ? g.value : null);
+        setPlan(p.status === "fulfilled" ? p.value : null);
+        setPlans(pl.status === "fulfilled" ? pl.value : []);
+        setAlignment(a.status === "fulfilled" ? a.value : null);
+        setFutureSelf(fs.status === "fulfilled" ? fs.value : null);
+        setWaves(w.status === "fulfilled" ? w.value : []);
+        setLoading(false);
+      });
+    }, [user?.token]),
+  );
 
   if (loading) return <LoadingScreen />;
 
@@ -74,7 +94,29 @@ export default function JourneyScreen() {
     const next = waves.map((w) => (w.id === id ? { ...w, count: w.count + 1 } : w));
     setWaves(next);
     await saveWaves(next);
-    Alert.alert("Dalga kaydedildi", "Sayaç sıfırlanmaz, sadece artar.");
+
+    if (!user?.token) {
+      alert("Dalga atlatıldı 🌊", "Sayaç sıfırlanmaz, sadece artar.");
+      return;
+    }
+    try {
+      const award = await recordWaveSurvived();
+      await patchPrefs({ tohum: award.balance });
+      const bumped = next.find((w) => w.id === id);
+      const milestone = bumped && bumped.count > 0 && bumped.count % 5 === 0;
+      if (award.awarded) {
+        alert(
+          milestone ? `🌊 ${bumped!.count}. dalga! 🫧` : "Dalga atlatıldı 🌊",
+          milestone
+            ? `${bumped!.name} için ${bumped!.count} dalgayı geride bıraktın — +1 İnci kazandın.`
+            : "+1 İnci kazandın. Sayaç sıfırlanmaz, sadece artar.",
+        );
+      } else {
+        alert("Dalga atlatıldı 🌊", "Bugünkü İnci sınırına ulaştın ama sayaç yine de arttı.");
+      }
+    } catch {
+      alert("Dalga atlatıldı 🌊", "Sayaç sıfırlanmaz, sadece artar.");
+    }
   }
 
   async function addWave() {
@@ -84,6 +126,24 @@ export default function JourneyScreen() {
     setWaves(next);
     setNewWave("");
     await saveWaves(next);
+  }
+
+  async function handleDeleteStep(stepId: string) {
+    if (!user?.token || !plan) return;
+    try {
+      const updatedSteps = plan.steps
+        .filter((s) => s.id !== stepId)
+        .map((s, i) => ({
+          dayOffset: s.dayOffset,
+          title: s.title,
+          description: s.description,
+          sortOrder: i,
+        }));
+      const revised = await revisePlan({ basePlanId: plan.id, steps: updatedSteps, activate: true });
+      setPlan(revised);
+    } catch (e) {
+      alert("Hata", "Adım silinemedi.");
+    }
   }
 
   return (
@@ -99,7 +159,11 @@ export default function JourneyScreen() {
 
       {seg === 0 ? (
         <>
-          <Pressable onPress={() => setBubbleOpen((v) => !v)}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={bubbleOpen ? "Vizyon cümlesini küçült" : "Vizyon cümlesini büyüt"}
+            onPress={() => setBubbleOpen((v) => !v)}
+          >
             <Glass style={[styles.bubble, bubbleOpen && styles.bubbleExp]}>
               <Text style={[styles.quote, bubbleOpen && styles.quoteExp]}>“{quote}”</Text>
               <Text style={styles.hint}>{bubbleOpen ? "Küçültmek için dokun" : "Büyütmek için dokun"}</Text>
@@ -116,15 +180,22 @@ export default function JourneyScreen() {
               </Text>
               <View style={styles.brow}>
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Adımları sabaha taşı"
                   style={styles.bsmY}
                   onPress={() => {
                     setAdaptiveDone(true);
-                    Alert.alert("Not alındı", "Gerçek sürümde plan v2 üretilir — geçmiş korunur.");
+                    alert("Not alındı", "Gerçek sürümde plan v2 üretilir — geçmiş korunur.");
                   }}
                 >
                   <Text style={styles.bsmYText}>Sabaha taşı</Text>
                 </Pressable>
-                <Pressable style={styles.bsmN} onPress={() => setAdaptiveDone(true)}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Böyle kalsın, değiştirme"
+                  style={styles.bsmN}
+                  onPress={() => setAdaptiveDone(true)}
+                >
                   <Text style={styles.bsmNText}>Böyle kalsın</Text>
                 </Pressable>
               </View>
@@ -137,29 +208,43 @@ export default function JourneyScreen() {
 
           <Eyebrow style={styles.sec}>Bugünün planı · {steps.length} adım</Eyebrow>
           {steps.map((step, index) => (
-            <TapRow
-              key={step.id}
-              title={`${String(index + 1).padStart(2, "0")} · ${step.title}`}
-              subtitle={step.description || undefined}
-              arrow="›"
-              onPress={() => router.push(`/intention/new?stepId=${step.id}` as Href)}
-            />
+            <SwipeableCard key={step.id} label={step.title} onSwipe={() => void handleDeleteStep(step.id)}>
+              <TapRow
+                title={`${String(index + 1).padStart(2, "0")} · ${step.title}`}
+                subtitle={step.description || undefined}
+                arrow="›"
+                onPress={() => router.push(`/intention/new?stepId=${step.id}` as Href)}
+              />
+            </SwipeableCard>
           ))}
 
-          <Pressable onPress={() => router.push("/intention/new" as Href)} style={styles.add}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Niyet ekle"
+            onPress={() => router.push("/intention/new" as Href)}
+            style={styles.add}
+          >
             <Text style={styles.addText}>+ Niyet ekle</Text>
           </Pressable>
 
           <Glass style={styles.stat}>
-            <Eyebrow style={styles.lbl}>Terk Etmek İstediklerimiz · Dalga Var</Eyebrow>
+            <View style={styles.waveHeadRow}>
+              <Eyebrow style={styles.lbl}>🌊 Dalgalar</Eyebrow>
+              <Text style={styles.wavePearlHint}>Her atlatış +1 🫧</Text>
+            </View>
             {waves.map((w) => (
               <View key={w.id} style={styles.waveRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.waveName}>{w.name}</Text>
                   <Text style={styles.waveCount}>{w.count} dalga atlatıldı</Text>
                 </View>
-                <Pressable style={styles.urgeMini} onPress={() => void bumpWave(w.id)}>
-                  <Text style={styles.urgeMiniText}>Atlat</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`${w.name} için dalga atlatıldı işaretle`}
+                  style={styles.urgeMini}
+                  onPress={() => void bumpWave(w.id)}
+                >
+                  <Text style={styles.urgeMiniText}>🫧 Atlat</Text>
                 </Pressable>
               </View>
             ))}
@@ -169,9 +254,14 @@ export default function JourneyScreen() {
                 value={newWave}
                 onChangeText={setNewWave}
                 placeholder="Bırakmak istediğin ne?"
-                placeholderTextColor={theme.color.ink40}
+                placeholderTextColor={theme.color.ink70}
               />
-              <Pressable onPress={() => void addWave()} style={styles.bsmY}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Dalga ekle"
+                onPress={() => void addWave()}
+                style={styles.bsmY}
+              >
                 <Text style={styles.bsmYText}>Ekle</Text>
               </Pressable>
             </View>
@@ -184,7 +274,7 @@ export default function JourneyScreen() {
       {seg === 1 ? (
         <>
           <Glass style={styles.stat}>
-            <Eyebrow style={styles.lbl}>Plan sağlığı · Yuvmi Forecast</Eyebrow>
+            <Eyebrow style={styles.lbl}>Plan sağlığı</Eyebrow>
             <Text style={styles.healthBig}>{health.title}</Text>
             <Text style={styles.body}>{health.body}</Text>
             <Text style={[styles.body, styles.forecast]}>{health.forecast}</Text>
@@ -201,16 +291,20 @@ export default function JourneyScreen() {
         <>
           <Glass style={styles.stat}>
             <Eyebrow style={styles.lbl}>Plan evrimi</Eyebrow>
-            {(plans.length ? plans : plan ? [plan] : []).map((p) => (
+            {(plans.length ? plans : plan ? [plan] : []).slice(0, 5).map((p) => (
               <View key={p.id} style={styles.tlitem}>
                 <Text style={styles.tlv}>v{p.version}</Text>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.waveName}>{goal?.title ?? "Plan"}</Text>
-                  <Text style={styles.hint}>{shortStamp(p.createdAt)} · {p.status}</Text>
+                  <Text style={styles.hint}>{shortStamp(p.createdAt)} · {PLAN_STATUS_LABEL[p.status] ?? p.status}</Text>
                 </View>
               </View>
             ))}
-            <Text style={styles.hint}>Eski planlar silinmez — hayatındaki değişim versiyonlanır.</Text>
+            <Text style={styles.hint}>
+              {plans.length > 5
+                ? `+${plans.length - 5} eski sürüm daha — silinmez, sadece geçmişte kalır.`
+                : "Eski planlar silinmez — hayatındaki değişim versiyonlanır."}
+            </Text>
           </Glass>
           <TapRow
             title="Plan geçmişi"
@@ -278,6 +372,18 @@ const styles = StyleSheet.create({
   },
   stat: { padding: 14, marginBottom: 10 },
   lbl: { marginBottom: 8 },
+  waveHeadRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 2,
+  },
+  wavePearlHint: {
+    fontFamily: theme.font.mono,
+    fontSize: 10.5,
+    color: theme.color.blueDeep,
+    marginBottom: 8,
+  },
   waveRow: {
     flexDirection: "row",
     alignItems: "center",

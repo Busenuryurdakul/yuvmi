@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { SubpageScreen } from "@/components/ui/SubpageScreen";
 import { Eyebrow, Glass } from "@/components/ui/Glass";
 import { Button } from "@/components/ui/Button";
 import { useMode } from "@/context/ModeContext";
 import { loadRituals, saveRituals, type RitualDraft } from "@/lib/local";
+import { alert } from "@/lib/alert";
 import { theme } from "@/theme";
 
 const BLOCKS = [
@@ -30,7 +31,7 @@ export default function RitualBuilderScreen() {
 
   async function save() {
     if (!seq.length) {
-      Alert.alert("Blok ekle", "En az bir blok seç.");
+      alert("Blok ekle", "En az bir blok seç.");
       return;
     }
     const item: RitualDraft = {
@@ -44,7 +45,7 @@ export default function RitualBuilderScreen() {
     await patchPrefs({ tohum: (prefs?.tohum ?? 48) + 3 });
     setName("");
     setSeq([]);
-    Alert.alert("Kuruldu", `"${item.name}" Bugün → Ritüel sekmesinde. +3 tohum`);
+    alert("Kuruldu", `"${item.name}" Bugün → Ritüel sekmesinde. +3 tohum`);
   }
 
   return (

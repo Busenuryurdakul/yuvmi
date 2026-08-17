@@ -1,10 +1,11 @@
 import { useCallback, useState } from "react";
-import { Alert, StyleSheet, Text, TextInput, View } from "react-native";
+import { StyleSheet, Text, TextInput, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { LIFE_DOMAINS, type LifeDomain } from "@yuvmi/shared";
 import { Screen } from "@/components/ui/Screen";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Stepper } from "@/components/ui/Stepper";
+import { alert } from "@/lib/alert";
 import { Button } from "@/components/ui/Button";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { DomainChipGrid } from "@/components/future-self/DomainChipGrid";
@@ -33,7 +34,7 @@ export default function OnboardingFutureSelfScreen() {
     setInitializing(true);
     setError(null);
     try {
-      const profile = await fetchFutureSelf(user.token);
+      const profile = await fetchFutureSelf();
       setHasExistingProfile(true);
       setProfileApproved(profile.status === "approved");
       setTitle(profile.title || "Gelecekteki Ben");
@@ -80,19 +81,19 @@ export default function OnboardingFutureSelfScreen() {
     };
   }
 
-  async function saveProfile(token: string) {
+  async function saveProfile() {
     if (profileApproved) return;
     const payload = buildPayload();
     if (hasExistingProfile) {
-      await updateFutureSelf(token, payload);
+      await updateFutureSelf(payload);
       return;
     }
     try {
-      await createFutureSelf(token, payload);
+      await createFutureSelf(payload);
       setHasExistingProfile(true);
     } catch (err) {
       if (err instanceof ApiError && err.code === 409) {
-        await updateFutureSelf(token, payload);
+        await updateFutureSelf(payload);
         setHasExistingProfile(true);
         return;
       }
@@ -108,7 +109,7 @@ export default function OnboardingFutureSelfScreen() {
     if (!user?.token || domains.length === 0) {
       const message = "En az bir yaşam alanı seç.";
       setError(message);
-      Alert.alert("Eksik bilgi", message);
+      alert("Eksik bilgi", message);
       return;
     }
     setError(null);
@@ -118,7 +119,7 @@ export default function OnboardingFutureSelfScreen() {
         router.replace("/(onboarding)/goal");
         return;
       }
-      await saveProfile(user.token);
+      await saveProfile();
       router.replace("/(onboarding)/future-self-review");
     } catch (err) {
       if (err instanceof ApiError && err.code === 403) {
@@ -127,7 +128,7 @@ export default function OnboardingFutureSelfScreen() {
       }
       const message = err instanceof Error ? err.message : "Bir hata oluştu.";
       setError(message);
-      Alert.alert("Kaydedilemedi", message);
+      alert("Kaydedilemedi", message);
     } finally {
       setLoading(false);
     }

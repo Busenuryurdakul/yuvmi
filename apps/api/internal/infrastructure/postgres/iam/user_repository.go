@@ -66,7 +66,7 @@ func (r *UserRepo) Update(ctx context.Context, user *model.User) error {
 	_, err := r.db.Exec(ctx,
 		`UPDATE users SET email=$1, password_hash=$2, first_name=$3, last_name=$4,
 		 auth_provider=$5, provider_subject=$6, status=$7, updated_at=$8 WHERE id=$9`,
-		user.Email, nullIfEmptyHash(user.PasswordHash), user.FirstName, user.LastName,
+		user.Email, nullIfEmpty(user.PasswordHash), user.FirstName, user.LastName,
 		nullIfEmpty(user.AuthProvider), nullIfEmpty(user.ProviderSubject),
 		user.Status, user.UpdatedAt, user.ID,
 	)
@@ -108,6 +108,9 @@ func (r *UserRepo) List(ctx context.Context, offset, limit int) ([]*model.User, 
 		}
 		users = append(users, u)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, domainErr.New(domainErr.ErrInternal, "failed to list users", err)
+	}
 	return users, total, nil
 }
 
@@ -131,14 +134,102 @@ func (r *UserRepo) scanUser(row pgx.Row) (*model.User, error) {
 	return &u, nil
 }
 
-func nullIfEmpty(s string) *string {
-	if s == "" {
-		return nil
+func (r *UserRepo) GetPearlBalance(ctx context.Context, userID uuid.UUID) (int, error) {
+	var balance int
+	err := r.db.QueryRow(ctx, `SELECT pearl_balance FROM users WHERE id = $1`, userID).Scan(&balance)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, domainErr.New(domainErr.ErrNotFound, "user not found", nil)
+		}
+		return 0, domainErr.New(domainErr.ErrInternal, "failed to get pearl balance", err)
 	}
-	return &s
+	return balance, nil
 }
 
-func nullIfEmptyHash(s string) *string {
+// AwardPearlsIfUnderDailyCap serializes concurrent award attempts for the
+// same user+reason with a transaction-scoped advisory lock, so the
+// count-then-award check can't race: only one caller at a time can be
+// mid-check for a given (userID, reason) pair.
+func (r *UserRepo) AwardPearlsIfUnderDailyCap(ctx context.Context, userID uuid.UUID, reason string, amount, dailyCap int, since time.Time) (int, bool, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return 0, false, domainErr.New(domainErr.ErrInternal, "failed to start transaction", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, userID.String()+":"+reason); err != nil {
+		return 0, false, domainErr.New(domainErr.ErrInternal, "failed to acquire pearl award lock", err)
+	}
+
+	var count int
+	if err := tx.QueryRow(ctx,
+		`SELECT COUNT(*) FROM pearl_awards WHERE user_id = $1 AND reason = $2 AND created_at >= $3`,
+		userID, reason, since,
+	).Scan(&count); err != nil {
+		return 0, false, domainErr.New(domainErr.ErrInternal, "failed to count pearl awards", err)
+	}
+
+	if count >= dailyCap {
+		var balance int
+		if err := tx.QueryRow(ctx, `SELECT pearl_balance FROM users WHERE id = $1`, userID).Scan(&balance); err != nil {
+			return 0, false, domainErr.New(domainErr.ErrInternal, "failed to get pearl balance", err)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return 0, false, domainErr.New(domainErr.ErrInternal, "failed to commit pearl award check", err)
+		}
+		return balance, false, nil
+	}
+
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO pearl_awards (user_id, reason, amount) VALUES ($1, $2, $3)`,
+		userID, reason, amount,
+	); err != nil {
+		return 0, false, domainErr.New(domainErr.ErrInternal, "failed to record pearl award", err)
+	}
+
+	var balance int
+	if err := tx.QueryRow(ctx,
+		`UPDATE users SET pearl_balance = pearl_balance + $2 WHERE id = $1 RETURNING pearl_balance`,
+		userID, amount,
+	).Scan(&balance); err != nil {
+		return 0, false, domainErr.New(domainErr.ErrInternal, "failed to update pearl balance", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, false, domainErr.New(domainErr.ErrInternal, "failed to commit pearl award", err)
+	}
+	return balance, true, nil
+}
+
+func (r *UserRepo) AwardPearls(ctx context.Context, userID uuid.UUID, reason string, amount int) (int, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return 0, domainErr.New(domainErr.ErrInternal, "failed to start transaction", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO pearl_awards (user_id, reason, amount) VALUES ($1, $2, $3)`,
+		userID, reason, amount,
+	); err != nil {
+		return 0, domainErr.New(domainErr.ErrInternal, "failed to record pearl award", err)
+	}
+
+	var balance int
+	if err := tx.QueryRow(ctx,
+		`UPDATE users SET pearl_balance = pearl_balance + $2 WHERE id = $1 RETURNING pearl_balance`,
+		userID, amount,
+	).Scan(&balance); err != nil {
+		return 0, domainErr.New(domainErr.ErrInternal, "failed to update pearl balance", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, domainErr.New(domainErr.ErrInternal, "failed to commit pearl award", err)
+	}
+	return balance, nil
+}
+
+func nullIfEmpty(s string) *string {
 	if s == "" {
 		return nil
 	}

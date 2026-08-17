@@ -10,7 +10,7 @@ export default function OnboardingIndex() {
 
   useEffect(() => {
     if (!user?.token) return;
-    void resolveOnboardingHref(user.token).then(setHref);
+    void resolveOnboardingHref().then(setHref);
   }, [user?.token]);
 
   if (!href) return <LoadingScreen />;

@@ -12,6 +12,7 @@ type ProfileRepository interface {
 	GetByUserID(ctx context.Context, userID uuid.UUID) (*model.UserProfile, error)
 	Upsert(ctx context.Context, profile *model.UserProfile) error
 	SetOnboardingComplete(ctx context.Context, userID uuid.UUID) error
+	EnsureDefault(ctx context.Context, userID uuid.UUID, displayName string) error
 }
 
 type CheckinRepository interface {

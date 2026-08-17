@@ -20,7 +20,7 @@ export function useSubscription() {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchSubscription(token);
+      const data = await fetchSubscription();
       setSubscription(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Abonelik bilgisi alınamadı");

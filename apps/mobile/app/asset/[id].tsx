@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Alert, Image, ScrollView, StyleSheet, Text, View, Pressable } from "react-native";
+import { ScrollView, StyleSheet, Text, View, Pressable } from "react-native";
+import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
 import type { VisibilityLevel } from "@yuvmi/shared";
 import { Screen } from "@/components/ui/Screen";
@@ -17,6 +18,7 @@ import {
   shareAsset,
 } from "@/lib/api/yuvmi";
 import type { AssetResponse, SpaceResponse } from "@/lib/api/types";
+import { alert } from "@/lib/alert";
 import { theme } from "@/theme";
 
 export default function AssetDetailScreen() {
@@ -32,7 +34,7 @@ export default function AssetDetailScreen() {
 
   useEffect(() => {
     if (!user?.token || !id) return;
-    Promise.all([fetchAsset(user.token, id), fetchSpaces(user.token)])
+    Promise.all([fetchAsset(id), fetchSpaces()])
       .then(([a, s]) => {
         setAsset(a);
         setSpaces(s.filter((sp) => sp.status === "active" || sp.status === "pending"));
@@ -40,7 +42,7 @@ export default function AssetDetailScreen() {
         setSpaceId(a.spaceId ?? null);
         setGranteeIds(a.granteeIds ?? []);
       })
-      .catch(() => Alert.alert("Hata", "Dosya yüklenemedi."))
+      .catch(() => alert("Hata", "Dosya yüklenemedi."))
       .finally(() => setLoading(false));
   }, [user?.token, id]);
 
@@ -55,20 +57,20 @@ export default function AssetDetailScreen() {
   const handleShare = async () => {
     if (!user?.token || !asset) return;
     if (visibility !== "private" && !spaceId) {
-      Alert.alert("Alan seç", "Paylaşım için bir ortak alan seç.");
+      alert("Alan seç", "Paylaşım için bir ortak alan seç.");
       return;
     }
     setSaving(true);
     try {
-      const updated = await shareAsset(user.token, asset.id, {
+      const updated = await shareAsset(asset.id, {
         visibility,
         spaceId: visibility === "private" ? undefined : spaceId ?? undefined,
         granteeIds: visibility === "specific_members" ? granteeIds : undefined,
       });
       setAsset(updated);
-      Alert.alert("Kaydedildi", "Görünürlük ayarları güncellendi.");
+      alert("Kaydedildi", "Görünürlük ayarları güncellendi.");
     } catch (e) {
-      Alert.alert("Hata", e instanceof Error ? e.message : "Paylaşım başarısız.");
+      alert("Hata", e instanceof Error ? e.message : "Paylaşım başarısız.");
     } finally {
       setSaving(false);
     }
@@ -76,18 +78,18 @@ export default function AssetDetailScreen() {
 
   const handleRevoke = () => {
     if (!user?.token || !asset) return;
-    Alert.alert("Geri çek", "Bu içerik ortak alandan kaldırılır; arşivinde kalır.", [
+    alert("Geri çek", "Bu içerik ortak alandan kaldırılır; arşivinde kalır.", [
       { text: "Vazgeç", style: "cancel" },
       {
         text: "Geri çek",
         style: "destructive",
         onPress: async () => {
           try {
-            const updated = await revokeAssetFromSpace(user.token!, asset.id);
+            const updated = await revokeAssetFromSpace(asset.id);
             setAsset(updated);
             setVisibility("private");
           } catch (e) {
-            Alert.alert("Hata", e instanceof Error ? e.message : "Geri çekme başarısız.");
+            alert("Hata", e instanceof Error ? e.message : "Geri çekme başarısız.");
           }
         },
       },
@@ -111,7 +113,8 @@ export default function AssetDetailScreen() {
             headers: { Authorization: `Bearer ${user.token}` },
           }}
           style={styles.preview}
-          resizeMode="cover"
+          contentFit="cover"
+          cachePolicy="disk"
         />
       ) : (
         <Card>
@@ -191,11 +194,11 @@ const styles = StyleSheet.create({
     marginRight: theme.space.sm,
   },
   spaceChipActive: {
-    borderColor: theme.color.brand.rose,
+    borderColor: theme.color.blue,
     backgroundColor: "rgba(196, 113, 123, 0.1)",
   },
   spaceChipText: { fontSize: theme.font.size.sm, color: theme.color.text.secondary },
-  spaceChipTextActive: { color: theme.color.brand.roseText, fontWeight: theme.font.weight.semibold },
+  spaceChipTextActive: { color: theme.color.blueDeep, fontWeight: theme.font.weight.semibold },
   memberPick: { flexDirection: "row", alignItems: "center", gap: theme.space.md, paddingVertical: theme.space.sm },
   check: {
     width: 20,
@@ -204,7 +207,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: theme.color.line.firm,
   },
-  checkOn: { backgroundColor: theme.color.brand.rose, borderColor: theme.color.brand.rose },
+  checkOn: { backgroundColor: theme.color.blue, borderColor: theme.color.blue },
   memberName: { fontSize: theme.font.size.md, color: theme.color.text.primary },
   sharedNote: { fontSize: theme.font.size.sm, color: theme.color.text.secondary },
 });

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -28,6 +27,7 @@ import { BarRow, BigStat, StatBlock } from "@/components/today/StatBlock";
 import { useAuth } from "@/context/AuthContext";
 import { useMode } from "@/context/ModeContext";
 import { useTodayDashboard } from "@/hooks/useTodayDashboard";
+import { ApiError } from "@/lib/api/client";
 import { completeTask, skipTask, upsertCheckin, revisePlan } from "@/lib/api/yuvmi";
 import { SwipeableCard } from "@/components/today/SwipeableCard";
 import { longDate, toDateKey } from "@/lib/formatDate";
@@ -49,6 +49,7 @@ import {
   type RitualDraft,
 } from "@/lib/local";
 import { isCannedPlanStep } from "@yuvmi/shared";
+import { alert } from "@/lib/alert";
 import { theme } from "@/theme";
 
 const MOODS = [
@@ -147,6 +148,7 @@ export default function TodayScreen() {
     useTodayDashboard();
 
   const [seg, setSeg] = useState(0);
+  const [visitedSegs, setVisitedSegs] = useState<ReadonlySet<number>>(() => new Set([0]));
   const [picks, setPicks] = useState<Record<string, IntentionState>>({});
   const [offTrack, setOffTrack] = useState(false);
   const [savingMood, setSavingMood] = useState(false);
@@ -158,7 +160,6 @@ export default function TodayScreen() {
   const [drawnToday, setDrawnToday] = useState(false);
   const [ctxHidden, setCtxHidden] = useState(false);
   const [ctxLight, setCtxLight] = useState(false);
-  const [voicePhase, setVoicePhase] = useState<"idle" | "listen" | "prop" | "done">("idle");
   const [urgeLeft, setUrgeLeft] = useState<number | null>(null);
   const urgeRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -258,15 +259,21 @@ export default function TodayScreen() {
   const missDays = ticks.filter((t) => t === "none").length;
   const streak = streakFromTicks(ticks);
   const returns = plans.filter((p) => p.status === "superseded").length;
+  const markVisited = (i: number) => {
+    setVisitedSegs((prev) => (prev.has(i) ? prev : new Set(prev).add(i)));
+  };
+
   const go = (i: number) => {
     const next = Math.max(0, Math.min(2, i));
     setSeg(next);
+    markVisited(next);
     pagerRef.current?.scrollTo({ x: next * width, animated: true });
   };
 
   const onPagerScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const i = Math.round(e.nativeEvent.contentOffset.x / width);
     if (i !== seg) setSeg(i);
+    markVisited(i);
   };
 
   async function handleDeleteIntention(stepId: string) {
@@ -280,10 +287,10 @@ export default function TodayScreen() {
           description: s.description,
           sortOrder: i,
         }));
-      await revisePlan(user.token, { basePlanId: plan.id, steps: updatedSteps, activate: true });
-      void refresh();
+      await revisePlan({ basePlanId: plan.id, steps: updatedSteps, activate: true });
+      void refresh(true);
     } catch (e) {
-      Alert.alert("Hata", "Niyet silinemedi.");
+      alert("Hata", "Niyet silinemedi.");
     }
   }
 
@@ -296,7 +303,7 @@ export default function TodayScreen() {
       const value = level === 1 ? 1 : level === 2 ? 2 : level === 3 ? 4 : level === 4 ? 5 : 3;
       await handleMood(value, MOODS.find((m) => m.value === value)?.label ?? "İyi");
     } else {
-      void refresh();
+      void refresh(true);
     }
   }
 
@@ -313,19 +320,30 @@ export default function TodayScreen() {
       return copy;
     });
     await saveIntentionPick(stepId, toDateKey(new Date()), next);
-    if (next === "full" || next === "small") {
+
+    const linked = Boolean(task && (task.title === title || intentions.length === 1));
+    const willCallBackend = Boolean(user?.token && task && linked && next);
+
+    if ((next === "full" || next === "small") && !willCallBackend) {
       const add = next === "full" ? 2 : 1;
       await patchPrefs({ tohum: (prefs?.tohum ?? 48) + add });
     }
-    if (!user?.token || !task) return;
-    const linked = task.title === title || intentions.length === 1;
-    if (!linked || !next) return;
+
+    if (!willCallBackend || !user?.token || !task) return;
     try {
       const updated =
-        next === "none" ? await skipTask(user.token, task.id, "bugün olmadı") : await completeTask(user.token, task.id);
+        next === "none" ? await skipTask(task.id, "bugün olmadı") : await completeTask(task.id);
       setTask(updated);
+      // Backend is the source of truth for pearls earned on the linked daily task.
+      if (typeof updated.pearlBalance === "number") {
+        await patchPrefs({ tohum: updated.pearlBalance });
+      }
     } catch {
-      /* keep local */
+      // Backend call failed — fall back to a local optimistic pearl increment.
+      if (next === "full" || next === "small") {
+        const add = next === "full" ? 2 : 1;
+        await patchPrefs({ tohum: (prefs?.tohum ?? 48) + add });
+      }
     }
   }
 
@@ -335,7 +353,7 @@ export default function TodayScreen() {
     const nextMood = already ? 3 : value;
     setSavingMood(true);
     try {
-      const updated = await upsertCheckin(user.token, {
+      const updated = await upsertCheckin({
         mood: nextMood,
         energy: checkin?.energy ?? nextMood,
         gratitude: checkin?.gratitude ?? [],
@@ -349,8 +367,8 @@ export default function TodayScreen() {
         copy[copy.length - 1] = level;
         return copy;
       });
-    } catch {
-      /* ignore */
+    } catch (error) {
+      alert("Kaydedilemedi", error instanceof ApiError ? error.message : "Ruh hâlin kaydedilemedi, tekrar dene.");
     } finally {
       setSavingMood(false);
     }
@@ -359,15 +377,15 @@ export default function TodayScreen() {
   async function saveNote() {
     if (!user?.token) return;
     try {
-      const updated = await upsertCheckin(user.token, {
+      const updated = await upsertCheckin({
         mood: checkin?.mood ?? 3,
         energy: checkin?.energy ?? 3,
         gratitude: checkin?.gratitude ?? [],
         reflection: note,
       });
       setCheckin(updated);
-    } catch {
-      /* ignore */
+    } catch (error) {
+      alert("Kaydedilemedi", error instanceof ApiError ? error.message : "Not kaydedilemedi, tekrar dene.");
     }
   }
 
@@ -381,7 +399,7 @@ export default function TodayScreen() {
     }
     const deck = await loadDeck();
     if (!deck.length) {
-      router.push("/atolye/deck" as any);
+      router.push("/atolye/deck");
       return;
     }
     const pick = deck[Math.floor(Math.random() * deck.length)];
@@ -416,26 +434,12 @@ export default function TodayScreen() {
     }
   }, []);
 
-  function runVoice() {
-    setVoicePhase("listen");
-    setTimeout(() => setVoicePhase("prop"), 1600);
-  }
-
-  async function applyVoice() {
-    for (const step of intentions.slice(0, 2)) {
-      await handlePick(step.id, step.title, "full");
-    }
-    if (intentions[2]) await handlePick(intentions[2].id, intentions[2].title, "none");
-    await handleMood(1, "Yorgun");
-    setVoicePhase("done");
-  }
-
   if (loading && !task && !plan && !checkin) return <LoadingScreen />;
 
   const moodOn = checkin ? MOODS.find((m) => m.value === checkin.mood)?.label : undefined;
   const paneBottom = 120 + insets.bottom;
   const refreshControl = (
-    <RefreshControl refreshing={loading} onRefresh={() => void refresh()} tintColor={theme.color.blue} />
+    <RefreshControl refreshing={loading} onRefresh={() => void refresh(true)} tintColor={theme.color.blue} />
   );
   const protectSoft = "Dün olmadı. Minimum hâli yeter — en küçük adım da sayılır.";
   const protectHard = "Dün yapılmadı. Seri kırıldı — bugün geri al.";
@@ -467,6 +471,8 @@ export default function TodayScreen() {
           showsVerticalScrollIndicator={false}
           refreshControl={refreshControl}
         >
+          {visitedSegs.has(0) ? (
+          <>
           <AccordionStat label="Ritim · son 14 gün" defaultOpen>
             <RhythmStrip ticks={ticks} />
             <Text style={[styles.body, { marginTop: 9 }]}>
@@ -519,6 +525,8 @@ export default function TodayScreen() {
           </AccordionStat>
 
           <Button label="Haftalık değerlendirmeyi aç" onPress={() => router.push("/weekly-review")} />
+          </>
+          ) : null}
         </ScrollView>
 
         {/* Plan */}
@@ -528,8 +536,15 @@ export default function TodayScreen() {
           showsVerticalScrollIndicator={false}
           refreshControl={refreshControl}
         >
+          {visitedSegs.has(1) ? (
+          <>
           {/* Card draw widget */}
-          <Pressable onPress={drawCard} style={[styles.drawcard, { marginBottom: 12 }]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={drawnToday ? `Günün kartı: ${drawText}` : "Kart çek"}
+            onPress={drawCard}
+            style={[styles.drawcard, { marginBottom: 12 }]}
+          >
             <Text style={styles.drawText}>
               {drawnToday ? `🃏 Günün Kartı: ${drawText}` : `🃏 ${drawText}`}
             </Text>
@@ -546,7 +561,12 @@ export default function TodayScreen() {
                 onPress={() => router.push("/intention/new" as Href)}
                 style={{ marginTop: 14 }}
               />
-              <Pressable onPress={() => router.push("/(tabs)/yuvmi" as Href)} style={[styles.ghost, { marginTop: 8, marginBottom: 0 }]}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Yuvmi'yle planla"
+                onPress={() => router.push("/(tabs)/yuvmi" as Href)}
+                style={[styles.ghost, { marginTop: 8, marginBottom: 0 }]}
+              >
                 <Text style={styles.ghostText}>Yuvmi’yle planla</Text>
               </Pressable>
             </Glass>
@@ -573,6 +593,8 @@ export default function TodayScreen() {
                       {!ctxHidden ? (
                         <View style={styles.brow}>
                           <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel="Bugünü hafiflet"
                             style={styles.bsmY}
                             onPress={() => {
                               void setEnergy("lo");
@@ -581,7 +603,12 @@ export default function TodayScreen() {
                           >
                             <Text style={styles.bsmYText}>Hafiflet</Text>
                           </Pressable>
-                          <Pressable style={styles.bsmN} onPress={() => setCtxHidden(true)}>
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel="Böyle iyi, değiştirme"
+                            style={styles.bsmN}
+                            onPress={() => setCtxHidden(true)}
+                          >
                             <Text style={styles.bsmNText}>Böyle iyi</Text>
                           </Pressable>
                         </View>
@@ -596,6 +623,9 @@ export default function TodayScreen() {
                   {(["lo", "mid", "hi"] as EnergyLevel[]).map((lvl) => (
                     <Pressable
                       key={lvl}
+                      accessibilityRole="button"
+                      accessibilityLabel={EN_LABELS[lvl]}
+                      accessibilityState={{ selected: energy === lvl }}
                       onPress={() => void setEnergy(lvl)}
                       style={[styles.pk, energy === lvl && styles.pkOn]}
                     >
@@ -606,7 +636,12 @@ export default function TodayScreen() {
                 <Text style={[styles.body, { marginTop: 9 }]}>{EN_HINTS[energy]}</Text>
               </StatBlock>
 
-              <Pressable onPress={() => router.push("/(tabs)/yuvmi" as Href)} style={styles.ghost}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Yuvmi'yle planla"
+                onPress={() => router.push("/(tabs)/yuvmi" as Href)}
+                style={styles.ghost}
+              >
                 <Text style={styles.ghostText}>Yuvmi’yle planla</Text>
               </Pressable>
 
@@ -622,7 +657,11 @@ export default function TodayScreen() {
                       : picks[step.id]
                   : picks[step.id];
                 return (
-                  <SwipeableCard key={step.id} onSwipe={() => void handleDeleteIntention(step.id)}>
+                  <SwipeableCard
+                    key={step.id}
+                    label={step.title}
+                    onSwipe={() => void handleDeleteIntention(step.id)}
+                  >
                     <IntentionCard
                       title={step.title}
                       anchor={step.description || undefined}
@@ -636,17 +675,35 @@ export default function TodayScreen() {
                   </SwipeableCard>
                 );
               })}
-              <Pressable onPress={() => router.push("/intention/new" as Href)} style={styles.add}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Niyet ekle"
+                onPress={() => router.push("/intention/new" as Href)}
+                style={styles.add}
+              >
                 <Text style={styles.addText}>+ Niyet ekle</Text>
               </Pressable>
-              <Pressable onPress={startUrge} style={styles.urge}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Geçmesini bekle"
+                accessibilityHint="3 dakikalık bekleme sayacını başlatır"
+                onPress={startUrge}
+                style={styles.urge}
+              >
                 <Text style={styles.urgeText}>Geçmesini bekle</Text>
               </Pressable>
-              <Pressable onPress={() => setOffTrack(true)} style={styles.offtrack}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Yoldan çıktım, planı gözden geçir"
+                onPress={() => setOffTrack(true)}
+                style={styles.offtrack}
+              >
                 <Text style={styles.offtrackText}>Yoldan çıktım — planı gözden geçir</Text>
               </Pressable>
             </>
           )}
+          </>
+          ) : null}
         </ScrollView>
 
         {/* Hâl */}
@@ -656,40 +713,21 @@ export default function TodayScreen() {
           showsVerticalScrollIndicator={false}
           refreshControl={refreshControl}
         >
-          <StatBlock label="Günü sesle kapat">
-            <Text style={styles.body}>Kutucuklarla uğraşma. 20 saniye anlat, Yuvmi işaretlesin.</Text>
-            {voicePhase === "idle" ? (
-              <Button label="🗣️ Konuş — Yuvmi dinlesin" onPress={runVoice} style={{ marginTop: 10 }} />
-            ) : null}
-            {voicePhase === "listen" ? <Text style={styles.listen}>● Dinliyorum...</Text> : null}
-            {voicePhase === "prop" ? (
-              <View style={{ marginTop: 12 }}>
-                <Text style={styles.vq}>
-                  "Bugün sabah günlüğü yazdım ama akşam çok yorgundum. Yalnızca biraz yürüdüm. Biraz stresli bir gündü."
-                </Text>
-                <Text style={styles.body}>✓ İlk niyetler → Yaptım{"\n"}− Son niyet → Bugün olmadı{"\n"}◐ Ruh hâli → Yorgun</Text>
-                <Button label="Onayla ve işle" onPress={() => void applyVoice()} style={{ marginTop: 10 }} />
-                <Pressable onPress={() => setVoicePhase("idle")} style={{ marginTop: 8 }}>
-                  <Text style={styles.offtrackText}>Vazgeç</Text>
-                </Pressable>
-              </View>
-            ) : null}
-            {voicePhase === "done" ? (
-              <View style={{ marginTop: 12 }}>
-                <Text style={styles.doneVoice}>✓ İşlendi — niyetler ve ruh hâli güncellendi</Text>
-                <Pressable onPress={() => go(1)} style={styles.ghost}>
-                  <Text style={styles.ghostText}>Niyetlerini gör</Text>
-                </Pressable>
-              </View>
-            ) : null}
-          </StatBlock>
-
+          {visitedSegs.has(2) ? (
+          <>
           <StatBlock label="Bugün nasılsın?">
             <View style={styles.moods}>
               {MOODS.map((m) => {
                 const on = moodOn === m.label;
                 return (
-                  <Pressable key={m.label} onPress={() => void handleMood(m.value, m.label)} style={[styles.mo, on && styles.moOn]}>
+                  <Pressable
+                    key={m.label}
+                    accessibilityRole="button"
+                    accessibilityLabel={m.label}
+                    accessibilityState={{ selected: on }}
+                    onPress={() => void handleMood(m.value, m.label)}
+                    style={[styles.mo, on && styles.moOn]}
+                  >
                     <Text style={[styles.moLabel, on && styles.moLabelOn]}>{m.label}</Text>
                   </Pressable>
                 );
@@ -706,17 +744,20 @@ export default function TodayScreen() {
               onBlur={() => void saveNote()}
               multiline
               placeholder="Bugün seni ne etkiledi?"
-              placeholderTextColor={theme.color.ink40}
+              placeholderTextColor={theme.color.ink70}
             />
           </StatBlock>
 
-          <StatBlock label="Duygu geçmişin · son 30 gün">
-            <MoodGrid days={moodDays} onAddMoodForDay={handleAddMoodForDay} />
-          </StatBlock>
-
-          <Pressable onPress={() => go(0)} style={styles.toStats}>
-            <Text style={styles.toStatsText}>İstatistiklerine git →</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="İstatistiklerine git"
+            onPress={() => go(0)}
+            style={styles.toStats}
+          >
+            <Text style={styles.toStatsText}>Ruh hâli geçmişini istatistiklerde gör →</Text>
           </Pressable>
+          </>
+          ) : null}
         </ScrollView>
       </ScrollView>
 
@@ -785,16 +826,18 @@ const styles = StyleSheet.create({
     padding: 12,
     alignItems: "center",
   },
-  offtrackText: { fontFamily: theme.font.sans, fontSize: 12.5, color: theme.color.ink40, textAlign: "center" },
+  offtrackText: { fontFamily: theme.font.sans, fontSize: 12.5, color: theme.color.ink70, textAlign: "center" },
   moods: { flexDirection: "row", gap: 6, marginTop: 4 },
   mo: {
     flex: 1,
+    minHeight: 44,
     borderWidth: 1,
     borderColor: theme.color.ink15,
     backgroundColor: "rgba(255,255,255,0.4)",
     borderRadius: 12,
     paddingVertical: 13,
     alignItems: "center",
+    justifyContent: "center",
   },
   moOn: { backgroundColor: theme.color.blue, borderColor: theme.color.blue },
   moLabel: {
@@ -867,7 +910,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   bsmYText: { color: "#fff", fontFamily: theme.font.sansSemibold, fontWeight: theme.font.weight.semibold, fontSize: 13 },
-  bsmYOff: { backgroundColor: "rgba(37,99,235,0.38)" },
   bsmN: {
     flex: 1,
     backgroundColor: "rgba(255,255,255,0.5)",
@@ -889,12 +931,14 @@ const styles = StyleSheet.create({
   pick: { flexDirection: "row", gap: 6 },
   pk: {
     flex: 1,
+    minHeight: 44,
     borderWidth: 1,
     borderColor: theme.color.ink15,
     backgroundColor: "rgba(255,255,255,0.4)",
     borderRadius: 12,
     paddingVertical: 11,
     alignItems: "center",
+    justifyContent: "center",
   },
   pkOn: { backgroundColor: theme.color.blue, borderColor: theme.color.blue },
   pkText: { fontFamily: theme.font.sansSemibold, fontSize: 12, color: theme.color.ink70, fontWeight: theme.font.weight.semibold },
@@ -928,14 +972,4 @@ const styles = StyleSheet.create({
     fontSize: 13.5,
     color: theme.color.blueDeep,
   },
-  listen: { marginTop: 12, fontFamily: theme.font.mono, fontSize: 12, color: theme.color.danger },
-  vq: {
-    fontFamily: theme.font.sans,
-    fontSize: 13,
-    fontStyle: "italic",
-    color: theme.color.ink70,
-    lineHeight: 20,
-    marginBottom: 10,
-  },
-  doneVoice: { fontFamily: theme.font.mono, fontSize: 12, color: theme.color.blueDeep, marginBottom: 8 },
 });

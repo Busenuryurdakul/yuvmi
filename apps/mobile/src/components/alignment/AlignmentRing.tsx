@@ -52,12 +52,12 @@ const styles = StyleSheet.create({
   scoreCompact: {
     fontSize: 22,
   },
-  label: { fontSize: theme.font.size.xs, color: theme.color.inkMuted, letterSpacing: 1 },
+  label: { fontSize: theme.font.size.xs, color: theme.color.ink40, letterSpacing: 1 },
   compactWrap: { flexDirection: "row", alignItems: "center", gap: theme.space.lg },
   summary: {
     flex: 1,
     fontSize: theme.font.size.sm,
-    color: theme.color.inkMuted,
+    color: theme.color.ink40,
     lineHeight: 20,
   },
 });

@@ -1,6 +1,5 @@
 import { useState } from "react";
 import {
-  Alert,
   Platform,
   Pressable,
   StyleSheet,
@@ -13,6 +12,7 @@ import { router } from "expo-router";
 import { SubpageScreen } from "@/components/ui/SubpageScreen";
 import { Eyebrow, Glass } from "@/components/ui/Glass";
 import { Button } from "@/components/ui/Button";
+import { alert } from "@/lib/alert";
 import { theme } from "@/theme";
 
 type RelationType = "Partner" | "Arkadaş" | "Aile";
@@ -30,16 +30,16 @@ export default function InviteScreen() {
   const handleSendInvite = () => {
     const trimmedEmail = email.trim();
     if (!trimmedEmail) {
-      Alert.alert("Hata", "Lütfen geçerli bir e-posta adresi girin.");
+      alert("Hata", "Lütfen geçerli bir e-posta adresi girin.");
       return;
     }
 
     if (!/\S+@\S+\.\S+/.test(trimmedEmail)) {
-      Alert.alert("Hata", "Lütfen geçerli bir e-posta formatı girin.");
+      alert("Hata", "Lütfen geçerli bir e-posta formatı girin.");
       return;
     }
 
-    Alert.alert(
+    alert(
       "Davet Gönderildi",
       `${trimmedEmail} adresine ortak alan daveti başarıyla iletildi.`,
       [
@@ -102,6 +102,7 @@ export default function InviteScreen() {
             onValueChange={setShareRhythm}
             trackColor={{ false: "rgba(11, 18, 32, 0.12)", true: theme.color.blue }}
             thumbColor="#ffffff"
+            {...{ activeThumbColor: "#ffffff" }}
             ios_backgroundColor="rgba(11, 18, 32, 0.08)"
           />
         </View>
@@ -113,6 +114,7 @@ export default function InviteScreen() {
             onValueChange={setShareVision}
             trackColor={{ false: "rgba(11, 18, 32, 0.12)", true: theme.color.blue }}
             thumbColor="#ffffff"
+            {...{ activeThumbColor: "#ffffff" }}
             ios_backgroundColor="rgba(11, 18, 32, 0.08)"
           />
         </View>
@@ -124,6 +126,7 @@ export default function InviteScreen() {
             onValueChange={setShareMood}
             trackColor={{ false: "rgba(11, 18, 32, 0.12)", true: theme.color.blue }}
             thumbColor="#ffffff"
+            {...{ activeThumbColor: "#ffffff" }}
             ios_backgroundColor="rgba(11, 18, 32, 0.08)"
           />
         </View>
@@ -135,6 +138,7 @@ export default function InviteScreen() {
             onValueChange={setShareNotes}
             trackColor={{ false: "rgba(11, 18, 32, 0.12)", true: theme.color.blue }}
             thumbColor="#ffffff"
+            {...{ activeThumbColor: "#ffffff" }}
             ios_backgroundColor="rgba(11, 18, 32, 0.08)"
           />
         </View>

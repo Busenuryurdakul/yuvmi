@@ -1,5 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { AppState, type AppStateStatus } from "react-native";
+import { z } from "zod";
 import { ApiError } from "@/lib/api/client";
 import { completeTask, skipTask, upsertCheckin } from "@/lib/api/yuvmi";
 import type { LifeDomain } from "@yuvmi/shared";
@@ -42,11 +44,45 @@ function isTaskQueueItem(item: OfflineQueueItem): item is TaskQueueItem {
   return item.type === "task_complete" || item.type === "task_skip";
 }
 
+const offlineQueueItemSchema = z.union([
+  z.object({
+    id: z.string(),
+    type: z.literal("checkin"),
+    payload: z.object({
+      mood: z.number(),
+      energy: z.number(),
+      gratitude: z.array(z.string()),
+      reflection: z.string(),
+      domainScores: z.record(z.string(), z.number()).optional(),
+    }),
+    createdAt: z.string(),
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal("task_complete"),
+    payload: z.object({ taskId: z.string() }),
+    createdAt: z.string(),
+  }),
+  z.object({
+    id: z.string(),
+    type: z.literal("task_skip"),
+    payload: z.object({ taskId: z.string(), reason: z.string().optional() }),
+    createdAt: z.string(),
+  }),
+]) satisfies z.ZodType<OfflineQueueItem>;
+
+/** Validates each entry and drops corrupted ones individually, instead of
+ *  discarding the whole queue (or crashing) over one bad record. */
 async function loadQueue(): Promise<OfflineQueueItem[]> {
   const raw = await AsyncStorage.getItem(QUEUE_KEY);
   if (!raw) return [];
   try {
-    return JSON.parse(raw) as OfflineQueueItem[];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((entry) => {
+      const result = offlineQueueItemSchema.safeParse(entry);
+      return result.success ? [result.data] : [];
+    });
   } catch {
     return [];
   }
@@ -78,8 +114,12 @@ function dedupeQueue(items: OfflineQueueItem[]): OfflineQueueItem[] {
   return out;
 }
 
-function isStaleError(error: unknown): boolean {
-  return error instanceof ApiError && (error.code === 404 || error.code === 409);
+/** Whether a failed queued action never reached the server. Only these are
+ *  worth retrying — anything the server actually responded to (validation,
+ *  forbidden, "already done") will fail the same way every time, so retrying
+ *  it forever every 30s just leaves a dead item sitting in the queue. */
+function isNetworkError(error: unknown): boolean {
+  return error instanceof ApiError && error.code === 0;
 }
 
 function filterOutTaskAction(items: OfflineQueueItem[], taskId: string): OfflineQueueItem[] {
@@ -89,86 +129,6 @@ function filterOutTaskAction(items: OfflineQueueItem[], taskId: string): Offline
     }
     return true;
   });
-}
-
-export function useOfflineQueue(token: string | null | undefined) {
-  const [pendingCount, setPendingCount] = useState(0);
-  const [flushing, setFlushing] = useState(false);
-  const flushingRef = useRef(false);
-
-  const refreshCount = useCallback(async () => {
-    const items = dedupeQueue(await loadQueue());
-    setPendingCount(items.length);
-  }, []);
-
-  const enqueue = useCallback(
-    async (item: OfflineQueueInput) => {
-      const items = dedupeQueue(await loadQueue());
-      const next: OfflineQueueItem = {
-        ...item,
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        createdAt: new Date().toISOString(),
-      } as OfflineQueueItem;
-
-      if (item.type === "checkin") {
-        const withoutCheckins = items.filter((i) => i.type !== "checkin");
-        await saveQueue(dedupeQueue([...withoutCheckins, next]));
-      } else if (isTaskQueueInput(item)) {
-        const taskId = item.payload.taskId;
-        await saveQueue(dedupeQueue([...filterOutTaskAction(items, taskId), next]));
-      }
-      await refreshCount();
-    },
-    [refreshCount],
-  );
-
-  const flush = useCallback(async () => {
-    if (!token || flushingRef.current) return;
-    const items = dedupeQueue(await loadQueue());
-    if (items.length === 0) return;
-
-    flushingRef.current = true;
-    setFlushing(true);
-    const remaining: OfflineQueueItem[] = [];
-
-    try {
-      for (const item of items) {
-        try {
-          if (item.type === "checkin") {
-            await upsertCheckin(token, item.payload);
-          } else if (item.type === "task_complete") {
-            await completeTask(token, item.payload.taskId);
-          } else if (item.type === "task_skip") {
-            await skipTask(token, item.payload.taskId, item.payload.reason);
-          }
-        } catch (error) {
-          if (isStaleError(error)) {
-            continue;
-          }
-          remaining.push(item);
-        }
-      }
-
-      await saveQueue(remaining);
-      setPendingCount(remaining.length);
-    } finally {
-      flushingRef.current = false;
-      setFlushing(false);
-    }
-  }, [token]);
-
-  useEffect(() => {
-    void refreshCount();
-  }, [refreshCount]);
-
-  useEffect(() => {
-    if (!token) return;
-    void flush();
-    const interval = setInterval(() => void flush(), 30_000);
-    return () => clearInterval(interval);
-  }, [token, flush]);
-
-  return { pendingCount, flushing, enqueue, flush, refreshCount };
 }
 
 export async function enqueueOfflineItem(item: OfflineQueueInput) {
@@ -185,4 +145,113 @@ export async function enqueueOfflineItem(item: OfflineQueueInput) {
     const taskId = item.payload.taskId;
     await saveQueue(dedupeQueue([...filterOutTaskAction(items, taskId), next]));
   }
+}
+
+/** Module-level, not per-hook-instance: AppEffects and check-in.tsx each
+ *  mount their own useOfflineQueue(), and without a shared guard both
+ *  instances' 30s intervals can flush the same queued item at the same time,
+ *  submitting it twice. */
+let flushInFlight = false;
+
+async function flushQueue(): Promise<OfflineQueueItem[]> {
+  if (flushInFlight) return dedupeQueue(await loadQueue());
+  flushInFlight = true;
+  try {
+    const items = dedupeQueue(await loadQueue());
+    if (items.length === 0) return items;
+
+    const remaining: OfflineQueueItem[] = [];
+    for (const item of items) {
+      try {
+        if (item.type === "checkin") {
+          await upsertCheckin(item.payload);
+        } else if (item.type === "task_complete") {
+          await completeTask(item.payload.taskId);
+        } else if (item.type === "task_skip") {
+          await skipTask(item.payload.taskId, item.payload.reason);
+        }
+      } catch (error) {
+        if (isNetworkError(error)) {
+          remaining.push(item);
+        }
+        // Non-network failure: the server already ruled on this item and
+        // retrying won't change the answer, so drop it instead of retrying
+        // forever.
+      }
+    }
+
+    await saveQueue(remaining);
+    return remaining;
+  } finally {
+    flushInFlight = false;
+  }
+}
+
+export function useOfflineQueue(token: string | null | undefined) {
+  const [pendingCount, setPendingCount] = useState(0);
+  const [flushing, setFlushing] = useState(false);
+
+  const refreshCount = useCallback(async () => {
+    const items = dedupeQueue(await loadQueue());
+    setPendingCount(items.length);
+  }, []);
+
+  const enqueue = useCallback(
+    async (item: OfflineQueueInput) => {
+      await enqueueOfflineItem(item);
+      await refreshCount();
+    },
+    [refreshCount],
+  );
+
+  const flush = useCallback(async () => {
+    if (!token || flushInFlight) return;
+    setFlushing(true);
+    try {
+      const remaining = await flushQueue();
+      setPendingCount(remaining.length);
+    } finally {
+      setFlushing(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    void refreshCount();
+  }, [refreshCount]);
+
+  useEffect(() => {
+    if (!token) return;
+
+    let interval: ReturnType<typeof setInterval> | null = null;
+    const startInterval = () => {
+      if (interval) return;
+      interval = setInterval(() => void flush(), 30_000);
+    };
+    const stopInterval = () => {
+      if (interval) clearInterval(interval);
+      interval = null;
+    };
+
+    void flush();
+    startInterval();
+
+    // Backgrounded polling just burns battery retrying a connection nobody's
+    // waiting on. Pause it, and flush right away on return instead of
+    // waiting up to 30s — that's when connectivity most often comes back.
+    const subscription = AppState.addEventListener("change", (state: AppStateStatus) => {
+      if (state === "active") {
+        void flush();
+        startInterval();
+      } else {
+        stopInterval();
+      }
+    });
+
+    return () => {
+      stopInterval();
+      subscription.remove();
+    };
+  }, [token, flush]);
+
+  return { pendingCount, flushing, enqueue, flush, refreshCount };
 }

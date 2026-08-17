@@ -1,31 +1,39 @@
 import { useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SubpageScreen } from "@/components/ui/SubpageScreen";
 import { Eyebrow } from "@/components/ui/Glass";
 import { useMode } from "@/context/ModeContext";
+import { alert } from "@/lib/alert";
 import { theme } from "@/theme";
 
 type ShopItem = { emoji: string; name: string; cost: number };
 
 const SHOP: Record<string, ShopItem[]> = {
   garden: [
-    { emoji: "🪸", name: "Kızıl mercan", cost: 6 },
-    { emoji: "🏺", name: "Paslı amfora", cost: 12 },
-    { emoji: "🪼", name: "Fosforlu denizanası", cost: 8 },
-    { emoji: "⚓️", name: "Paslı çapa", cost: 10 },
-    { emoji: "🦪", name: "İncili istiridye", cost: 14 },
-    { emoji: "🦀", name: "Mavi yengeç", cost: 5 },
+    { emoji: "🪸", name: "Kızıl mercan dalı", cost: 6 },
+    { emoji: "🤿", name: "Eski dalgıç maskesi", cost: 10 },
+    { emoji: "🎣", name: "Paslı olta", cost: 8 },
+    { emoji: "🪔", name: "Derin deniz feneri", cost: 12 },
+    { emoji: "🛟", name: "Can simidi", cost: 9 },
+    { emoji: "🏴‍☠️", name: "Korsan bayrağı", cost: 14 },
+    { emoji: "🧽", name: "Deniz süngeri", cost: 5 },
+    { emoji: "👓", name: "Kayıp gözlük", cost: 7 },
   ],
   seal: [
-    { emoji: "🦀", name: "Yengeç mührü", cost: 8 },
-    { emoji: "🪸", name: "Mercan mührü", cost: 6 },
+    { emoji: "🦈", name: "Köpekbalığı mührü", cost: 9 },
+    { emoji: "🦭", name: "Ayı balığı mührü", cost: 8 },
+    { emoji: "🔱", name: "Trident mührü", cost: 11 },
+    { emoji: "⚜️", name: "Amiral mührü", cost: 9 },
+    { emoji: "🐚", name: "Deniz kabuğu mührü", cost: 6 },
     { emoji: "⚓️", name: "Çapa mührü", cost: 10 },
-    { emoji: "🐚", name: "Deniz kabuğu mührü", cost: 9 },
   ],
   sound: [
     { emoji: "🐋", name: "Balina şarkıları", cost: 10 },
     { emoji: "🌊", name: "Kıyı dalgaları", cost: 12 },
-    { emoji: "⛈️", name: "Sahil fırtınası", cost: 12 },
+    { emoji: "🐬", name: "Yunus cıvıltıları", cost: 9 },
+    { emoji: "🌬️", name: "Rüzgar fısıltısı", cost: 7 },
+    { emoji: "🌙", name: "Gece med-cezri", cost: 8 },
+    { emoji: "🕳️", name: "Derin uçurum yankısı", cost: 13 },
   ],
 };
 
@@ -45,7 +53,7 @@ export default function ShopScreen() {
     const key = `${tab}:${item.name}`;
     if (owned.has(key)) return;
     if (tohum < item.cost) {
-      Alert.alert("Biraz daha İnci lazım 🫧", `${item.cost - tohum} İnci eksik. Aceleye gerek yok.`);
+      alert("Biraz daha İnci lazım 🫧", `${item.cost - tohum} İnci eksik. Aceleye gerek yok.`);
       return;
     }
     await patchPrefs({ tohum: tohum - item.cost });
@@ -56,7 +64,7 @@ export default function ShopScreen() {
       seal: `${item.name} mektup kutuna eklendi.`,
       sound: `${item.name} ambiyansı açıldı — dalışta kullanabilirsin.`,
     };
-    Alert.alert(`✓ ${item.name}`, messages[tab]);
+    alert(`✓ ${item.name}`, messages[tab]);
   }
 
   const items = SHOP[tab] ?? [];

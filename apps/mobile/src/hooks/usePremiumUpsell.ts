@@ -1,6 +1,6 @@
-import { Alert } from "react-native";
 import { router } from "expo-router";
 import { ApiError } from "@/lib/api/client";
+import { alert } from "@/lib/alert";
 import { isPremiumRequiredError } from "@/hooks/useSubscription";
 
 type UpsellOptions = {
@@ -14,7 +14,7 @@ export function promptPremiumUpsell(err: unknown, options: UpsellOptions = {}) {
   }
 
   const feature = options.feature ?? "Bu özellik";
-  Alert.alert(
+  alert(
     "Premium gerekli",
     `${feature} Premium plana dahil. Premium'a geçerek devam edebilirsin.`,
     [

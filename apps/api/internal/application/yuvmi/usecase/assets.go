@@ -112,7 +112,9 @@ func (s *Service) ShareAsset(ctx context.Context, userID, assetID uuid.UUID, req
 		if err := s.assets.UpdateShare(ctx, asset); err != nil {
 			return nil, err
 		}
-		_ = s.assets.RevokePermissionsForAsset(ctx, assetID)
+		if err := s.assets.RevokePermissionsForAsset(ctx, assetID); err != nil {
+			return nil, fmt.Errorf("revoke permissions: %w", err)
+		}
 		return s.toAssetResponse(asset, userID), nil
 
 	case assetmodel.VisibilitySpaceMembers, assetmodel.VisibilitySpecificMembers:
@@ -127,7 +129,9 @@ func (s *Service) ShareAsset(ctx context.Context, userID, assetID uuid.UUID, req
 		if err := s.assets.UpdateShare(ctx, asset); err != nil {
 			return nil, err
 		}
-		_ = s.assets.RevokePermissionsForAsset(ctx, assetID)
+		if err := s.assets.RevokePermissionsForAsset(ctx, assetID); err != nil {
+			return nil, fmt.Errorf("revoke permissions: %w", err)
+		}
 
 		if visibility == assetmodel.VisibilitySpecificMembers {
 			if len(req.GranteeIds) == 0 {
@@ -140,10 +144,12 @@ func (s *Service) ShareAsset(ctx context.Context, userID, assetID uuid.UUID, req
 				if err := s.requireSpaceMember(ctx, *req.SpaceID, gid); err != nil {
 					return nil, domainErr.New(domainErr.ErrValidation, "grantee must be space member", nil)
 				}
-				_ = s.assets.UpsertPermission(ctx, &assetmodel.SpacePermission{
+				if err := s.assets.UpsertPermission(ctx, &assetmodel.SpacePermission{
 					SpaceID: *req.SpaceID, AssetID: assetID, GranteeID: gid,
 					Action: "view", Visibility: visibility, GrantedByID: userID,
-				})
+				}); err != nil {
+					return nil, fmt.Errorf("grant permission: %w", err)
+				}
 			}
 		}
 

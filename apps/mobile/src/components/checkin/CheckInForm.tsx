@@ -59,7 +59,7 @@ export function CheckInForm({ initial, onSubmit, loading, tone = "paper" }: Chec
         value={gratitude}
         onChangeText={setGratitude}
         placeholder="Kahve, güneş, arkadaşım"
-        placeholderTextColor={ink ? theme.color.inkMuted : theme.color.text.tertiary}
+        placeholderTextColor={ink ? theme.color.ink40 : theme.color.text.tertiary}
       />
       <Text style={[styles.rowLabel, ink && styles.rowLabelInk]}>Kısa yansıma (opsiyonel)</Text>
       <TextInput
@@ -68,7 +68,7 @@ export function CheckInForm({ initial, onSubmit, loading, tone = "paper" }: Chec
         onChangeText={setReflection}
         multiline
         placeholder="Bugün aklında kalan bir şey..."
-        placeholderTextColor={ink ? theme.color.inkMuted : theme.color.text.tertiary}
+        placeholderTextColor={ink ? theme.color.ink40 : theme.color.text.tertiary}
       />
       <Button
         label={ink ? "KAYDET" : "Kaydet"}
@@ -117,10 +117,10 @@ const styles = StyleSheet.create({
     borderColor: theme.color.inkLine,
     backgroundColor: "transparent",
   },
-  dotActive: { backgroundColor: theme.color.brand.rose, borderColor: theme.color.brand.rose },
+  dotActive: { backgroundColor: theme.color.blue, borderColor: theme.color.blue },
   dotActiveInk: { backgroundColor: theme.color.onInk, borderColor: theme.color.onInk },
   value: { marginTop: theme.space.xs, fontSize: theme.font.size.xs, color: theme.color.text.tertiary },
-  valueInk: { color: theme.color.inkMuted },
+  valueInk: { color: theme.color.ink40 },
   input: {
     borderWidth: 1,
     borderColor: theme.color.line.firm,

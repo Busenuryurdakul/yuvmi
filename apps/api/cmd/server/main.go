@@ -402,7 +402,25 @@ func buildDependencies(
 	}
 	pushClient := infraNotify.NewExpoPushClient()
 	engine := alignment.NewEngine(taskRepo, checkinRepo, goalRepo, planRepo, alignmentRepo)
-	yuvmiSvc := yuvmiUC.NewService(userRepo, profilePG, profilePG, futureSelfRepo, goalRepo, planRepo, taskRepo, checkinRepo, alignmentRepo, reviewRepo, notificationRepo, spaceRepo, assetRepo, subscriptionRepo, objectStorage, engine, pushClient, cfg.Yuvmi)
+	yuvmiSvc := yuvmiUC.NewService(yuvmiUC.Deps{
+		Users:         userRepo,
+		Profiles:      profilePG,
+		FutureSelf:    futureSelfRepo,
+		Goals:         goalRepo,
+		Plans:         planRepo,
+		Tasks:         taskRepo,
+		Checkins:      checkinRepo,
+		Alignment:     alignmentRepo,
+		Reviews:       reviewRepo,
+		Notifications: notificationRepo,
+		Spaces:        spaceRepo,
+		Assets:        assetRepo,
+		Subscriptions: subscriptionRepo,
+		Storage:       objectStorage,
+		Engine:        engine,
+		Push:          pushClient,
+		YuvmiCfg:      cfg.Yuvmi,
+	})
 	deps.YuvmiHandler = yuvmiHandlerPkg.NewHandler(yuvmiSvc)
 
 	return deps, yuvmiSvc

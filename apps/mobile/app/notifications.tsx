@@ -1,10 +1,11 @@
 import { useCallback, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Screen } from "@/components/ui/Screen";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { alert } from "@/lib/alert";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useAuth } from "@/context/AuthContext";
@@ -25,10 +26,10 @@ export default function NotificationsScreen() {
     if (!user?.token) return;
     setLoading(true);
     try {
-      const data = await fetchNotifications(user.token);
+      const data = await fetchNotifications();
       setItems(data);
     } catch (error) {
-      Alert.alert("Yüklenemedi", error instanceof Error ? error.message : "Bir hata oluştu.");
+      alert("Yüklenemedi", error instanceof Error ? error.message : "Bir hata oluştu.");
     } finally {
       setLoading(false);
     }
@@ -43,7 +44,7 @@ export default function NotificationsScreen() {
   async function handleRead(item: NotificationResponse) {
     if (!user?.token || item.readAt) return;
     try {
-      await markNotificationRead(user.token, item.id);
+      await markNotificationRead(item.id);
       await load();
     } catch {
       // ignore
@@ -53,28 +54,33 @@ export default function NotificationsScreen() {
   async function handleTestPush() {
     if (!user?.token) return;
     try {
-      await sendTestPush(user.token);
-      Alert.alert("Gönderildi", "Test bildirimi kuyruğa alındı.");
+      await sendTestPush();
+      alert("Gönderildi", "Test bildirimi kuyruğa alındı.");
       await load();
     } catch (error) {
-      Alert.alert("Gönderilemedi", error instanceof Error ? error.message : "Bir hata oluştu.");
+      alert("Gönderilemedi", error instanceof Error ? error.message : "Bir hata oluştu.");
     }
   }
 
   if (loading) return <LoadingScreen />;
 
   return (
-    <Screen>
+    <Screen scroll={false}>
       <PageHeader title="Bildirimler" subtitle="Uygulama içi mesajlar." />
       <Button label="Test push gönder" variant="secondary" onPress={() => void handleTestPush()} />
 
-      {items.length === 0 ? (
-        <Card style={styles.gap}>
-          <EmptyState emoji="🔔" title="Bildirim yok" description="Haftalık değerlendirme ve hatırlatıcılar burada görünür." />
-        </Card>
-      ) : (
-        items.map((item) => (
-          <Pressable key={item.id} onPress={() => void handleRead(item)}>
+      <FlatList
+        data={items}
+        keyExtractor={(item) => item.id}
+        style={styles.list}
+        contentContainerStyle={items.length === 0 ? styles.emptyContainer : styles.listContent}
+        ListEmptyComponent={
+          <Card style={styles.gap}>
+            <EmptyState emoji="🔔" title="Bildirim yok" description="Haftalık değerlendirme ve hatırlatıcılar burada görünür." />
+          </Card>
+        }
+        renderItem={({ item }) => (
+          <Pressable onPress={() => void handleRead(item)}>
             <Card style={[styles.gap, !item.readAt && styles.unread]}>
               <View style={styles.row}>
                 <Text style={styles.title}>{item.title}</Text>
@@ -90,15 +96,18 @@ export default function NotificationsScreen() {
               ) : null}
             </Card>
           </Pressable>
-        ))
-      )}
+        )}
+      />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   gap: { marginTop: theme.space.lg },
-  unread: { borderColor: theme.color.accent, borderWidth: StyleSheet.hairlineWidth },
+  list: { flex: 1 },
+  listContent: { paddingBottom: theme.space.xl },
+  emptyContainer: { flexGrow: 1 },
+  unread: { borderColor: theme.color.blue, borderWidth: StyleSheet.hairlineWidth },
   row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   title: {
     fontSize: theme.font.size.md,
@@ -116,7 +125,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: theme.color.accent,
+    backgroundColor: theme.color.blue,
     marginLeft: theme.space.sm,
   },
 });

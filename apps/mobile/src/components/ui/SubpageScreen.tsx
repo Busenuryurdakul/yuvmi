@@ -36,6 +36,7 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: theme.color.mist,
+    overflow: "hidden",
   },
   fg: {
     flex: 1,

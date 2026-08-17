@@ -1,9 +1,10 @@
-import { Alert, StyleSheet, Text, TextInput, View } from "react-native";
+import { StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import { useState } from "react";
 import { Screen } from "@/components/ui/Screen";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { alert } from "@/lib/alert";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { forgotPassword } from "@/lib/api/yuvmi";
 import { ApiError } from "@/lib/api/client";
@@ -21,7 +22,7 @@ export default function ForgotPasswordScreen() {
       setSent(true);
     } catch (error) {
       const message = error instanceof ApiError ? error.message : "İstek başarısız.";
-      Alert.alert("Hata", message);
+      alert("Hata", message);
     } finally {
       setLoading(false);
     }

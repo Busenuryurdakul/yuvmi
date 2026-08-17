@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, StyleSheet, Text } from "react-native";
+import { StyleSheet, Text } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { SubpageScreen } from "@/components/ui/SubpageScreen";
 import { Field } from "@/components/ui/Field";
@@ -10,6 +10,7 @@ import { useAuth } from "@/context/AuthContext";
 import { fetchActivePlan, revisePlan } from "@/lib/api/yuvmi";
 import type { PlanResponse } from "@/lib/api/types";
 import { LIFE_DOMAINS } from "@yuvmi/shared";
+import { alert } from "@/lib/alert";
 import { theme } from "@/theme";
 
 const FREQS = ["Her gün", "Hafta içi", "Haftada 3", "Haftada 1"];
@@ -37,7 +38,7 @@ export default function NewIntentionScreen() {
 
   useEffect(() => {
     if (!user?.token) return;
-    void fetchActivePlan(user.token).then((p) => {
+    void fetchActivePlan().then((p) => {
       setPlan(p);
       if (stepId) {
         const step = p.steps.find((s) => s.id === stepId);
@@ -55,7 +56,7 @@ export default function NewIntentionScreen() {
   async function save() {
     if (!user?.token) return;
     if (!title.trim()) {
-      Alert.alert("Eksik", "Ne yapacağını yaz.");
+      alert("Eksik", "Ne yapacağını yaz.");
       return;
     }
     const description = [anchor.trim(), freq, min.trim() ? `en küçük hâli: ${min.trim()}` : ""]
@@ -78,11 +79,11 @@ export default function NewIntentionScreen() {
             sortOrder: steps.length,
           });
         }
-        await revisePlan(user.token, { basePlanId: plan.id, steps, activate: true });
+        await revisePlan({ basePlanId: plan.id, steps, activate: true });
       }
       router.back();
     } catch (e) {
-      Alert.alert("Kaydedilemedi", e instanceof Error ? e.message : "Bir hata oluştu.");
+      alert("Kaydedilemedi", e instanceof Error ? e.message : "Bir hata oluştu.");
     } finally {
       setSaving(false);
     }

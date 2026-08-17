@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Alert, StyleSheet, Text, TextInput } from "react-native";
+import { StyleSheet, Text, TextInput } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { SubpageScreen } from "@/components/ui/SubpageScreen";
 import { Glass } from "@/components/ui/Glass";
 import { Button } from "@/components/ui/Button";
 import { LIFE_DOMAINS, type LifeDomain } from "@yuvmi/shared";
+import { alert } from "@/lib/alert";
 import { loadAreaNote, saveAreaNote } from "@/lib/local";
 import { theme } from "@/theme";
 
@@ -29,7 +30,7 @@ export default function AreaNoteScreen() {
     const stamp = new Date().toISOString();
     await saveAreaNote(key, { now, want, savedAt: stamp });
     setSavedAt(stamp);
-    Alert.alert("Kaydedildi", "Bu alandaki notların yalnızca sana görünür.");
+    alert("Kaydedildi", "Bu alandaki notların yalnızca sana görünür.");
     router.back();
   }
 

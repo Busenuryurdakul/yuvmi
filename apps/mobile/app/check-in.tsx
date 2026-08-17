@@ -1,10 +1,12 @@
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Screen } from "@/components/ui/Screen";
 import { CheckInForm } from "@/components/checkin/CheckInForm";
 import { useAuth } from "@/context/AuthContext";
+import { alert } from "@/lib/alert";
 import { useOfflineQueue } from "@/hooks/useOfflineQueue";
+import { ApiError } from "@/lib/api/client";
 import { upsertCheckin } from "@/lib/api/yuvmi";
 import { longDate } from "@/lib/formatDate";
 import { theme } from "@/theme";
@@ -20,7 +22,12 @@ export default function CheckInScreen() {
         <Text style={styles.kicker}>{longDate()}</Text>
         <View style={styles.titleRow}>
           <Text style={styles.title}>Bugünkü hâlin</Text>
-          <Pressable onPress={() => router.back()} hitSlop={12}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Kapat"
+            onPress={() => router.back()}
+            hitSlop={12}
+          >
             <Text style={styles.close}>✕</Text>
           </Pressable>
         </View>
@@ -29,12 +36,24 @@ export default function CheckInScreen() {
         onSubmit={async (data) => {
           if (!user?.token) return;
           try {
-            await upsertCheckin(user.token, data);
+            await upsertCheckin(data);
             router.back();
-          } catch {
-            await enqueue({ type: "checkin", payload: data });
-            Alert.alert("Çevrimdışı kaydedildi", "Günlük kontrol bağlantı gelince gönderilecek.");
-            router.back();
+          } catch (error) {
+            if (error instanceof ApiError && error.code === 0) {
+              // Genuine network failure — the request never reached the
+              // server, so it's safe to replay later.
+              await enqueue({ type: "checkin", payload: data });
+              alert("Çevrimdışı kaydedildi", "Günlük kontrol bağlantı gelince gönderilecek.");
+              router.back();
+              return;
+            }
+            // The server responded and rejected it — replaying the same
+            // payload later won't fix that. Tell the user instead of
+            // silently queuing something that will never succeed.
+            alert(
+              "Kaydedilemedi",
+              error instanceof ApiError ? error.message : "Günlük kontrol kaydedilemedi, tekrar dene.",
+            );
           }
         }}
       />

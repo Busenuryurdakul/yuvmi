@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { SubpageScreen } from "@/components/ui/SubpageScreen";
 import { Eyebrow, Glass } from "@/components/ui/Glass";
 import { Button } from "@/components/ui/Button";
 import { loadDeck, saveDeck, type DeckCard } from "@/lib/local";
+import { alert } from "@/lib/alert";
 import { theme } from "@/theme";
 
 export default function DeckScreen() {
@@ -21,7 +22,7 @@ export default function DeckScreen() {
     setCards(next);
     setText("");
     await saveDeck(next);
-    Alert.alert("Eklendi", "Desten güncellendi.");
+    alert("Eklendi", "Desten güncellendi.");
   }
 
   async function remove(id: string) {

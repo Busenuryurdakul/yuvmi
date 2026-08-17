@@ -20,6 +20,8 @@ import {
 } from "@/lib/api/yuvmi";
 import { useAuth } from "@/context/AuthContext";
 
+const STALE_MS = 30_000;
+
 export function useTodayDashboard() {
   const { user } = useAuth();
   const [checkin, setCheckin] = useState<CheckinResponse | null>(null);
@@ -33,27 +35,31 @@ export function useTodayDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
+  const lastFetchAtRef = useRef(0);
+  const hasLoadedOnceRef = useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
   }, []);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (force = false) => {
     if (!user?.token) return;
-    setLoading(true);
+    if (!force && Date.now() - lastFetchAtRef.current < STALE_MS) return;
+    lastFetchAtRef.current = Date.now();
+    if (!hasLoadedOnceRef.current) setLoading(true);
     setError(null);
     try {
       const [checkinResult, taskResult, alignmentResult, historyResult, planResult, futureResult, goalResult, plansResult] =
         await Promise.allSettled([
-          fetchTodayCheckin(user.token),
-          fetchTodayTask(user.token),
-          fetchTodayAlignment(user.token),
-          fetchAlignmentHistory(user.token),
-          fetchActivePlan(user.token),
-          fetchFutureSelf(user.token),
-          fetchActiveGoal(user.token),
-          fetchPlans(user.token),
+          fetchTodayCheckin(),
+          fetchTodayTask(),
+          fetchTodayAlignment(),
+          fetchAlignmentHistory(),
+          fetchActivePlan(),
+          fetchFutureSelf(),
+          fetchActiveGoal(),
+          fetchPlans(),
         ]);
 
       if (!mountedRef.current) return;
@@ -76,12 +82,13 @@ export function useTodayDashboard() {
         setError(err instanceof ApiError ? err.message : "Veriler yüklenemedi.");
       }
     } finally {
+      hasLoadedOnceRef.current = true;
       if (mountedRef.current) setLoading(false);
     }
   }, [user?.token]);
 
   useEffect(() => {
-    void refresh();
+    void refresh(true);
   }, [refresh]);
 
   return { checkin, task, alignment, history, plan, futureSelf, goal, plans, loading, error, refresh, setCheckin, setTask };

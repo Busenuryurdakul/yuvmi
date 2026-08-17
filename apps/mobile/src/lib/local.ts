@@ -92,6 +92,47 @@ const KEYS = {
   dailyCard: "yuvmi.daily-card",
 };
 
+/**
+ * Bu dosyanın dışında tanımlanan, yine kullanıcıya özel anahtarlar.
+ * Sahibi olan modüller kendi sabitlerinden okumaya devam ediyor; buradaki
+ * kopyanın tek amacı çıkışta temizlenmelerini garanti etmek.
+ */
+const EXTERNAL_USER_KEYS = [
+  // src/hooks/useOfflineQueue.ts → QUEUE_KEY
+  "yuvmi_offline_queue",
+  // app/atolye/notifications.tsx → STORAGE_KEYS
+  "yuvmi_noti_sabah_time",
+  "yuvmi_noti_aksam_time",
+  "yuvmi_noti_gunun_niyeti",
+  "yuvmi_noti_aksam_ozet",
+  "yuvmi_noti_haftalik_deg",
+  "yuvmi_noti_geri_donus",
+  "yuvmi_noti_motivasyon_on",
+  "yuvmi_noti_motivasyon_freq",
+  "yuvmi_noti_custom_list",
+];
+
+/**
+ * Oturum kapatılırken silinmesi gereken TÜM kullanıcıya özel AsyncStorage
+ * anahtarları. Yeni bir anahtar eklerken ya yukarıdaki `KEYS` nesnesine ya da
+ * `EXTERNAL_USER_KEYS` listesine ekle — `clearLocalUserData()` yalnızca burayı
+ * okuyor, dolayısıyla listeye girmeyen anahtar cihazda kalır ve bir sonraki
+ * kullanıcıya görünür.
+ */
+export const USER_SCOPED_STORAGE_KEYS: readonly string[] = [
+  ...Object.values(KEYS),
+  ...EXTERNAL_USER_KEYS,
+];
+
+/**
+ * Çıkışta çağrılır (src/context/AuthContext.tsx → signOut). Cihazda kalan
+ * kişisel veriyi — ruh hâli geçmişi, vizyon panosu, mektup, alan notları,
+ * bekleyen çevrimdışı kuyruk, bildirim tercihleri — siler.
+ */
+export async function clearLocalUserData(): Promise<void> {
+  await AsyncStorage.removeMany([...USER_SCOPED_STORAGE_KEYS]);
+}
+
 export async function loadMoodHistory(): Promise<Record<string, MoodLevel>> {
   return readJson(KEYS.mood, {});
 }

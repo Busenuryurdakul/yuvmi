@@ -1,10 +1,11 @@
 import { useCallback, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { Screen } from "@/components/ui/Screen";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Stepper } from "@/components/ui/Stepper";
 import { Button } from "@/components/ui/Button";
+import { alert } from "@/lib/alert";
 import { Card } from "@/components/ui/Card";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { domainDisplayLabel } from "@/components/future-self/DomainChipGrid";
@@ -28,7 +29,7 @@ export default function FutureSelfReviewScreen() {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchFutureSelf(user.token);
+      const data = await fetchFutureSelf();
       if (data.status === "approved") {
         router.replace("/(onboarding)/goal");
         return;
@@ -37,7 +38,7 @@ export default function FutureSelfReviewScreen() {
     } catch {
       const message = "Profil yüklenemedi.";
       setError(message);
-      Alert.alert("Hata", message);
+      alert("Hata", message);
     } finally {
       setLoading(false);
     }
@@ -62,12 +63,12 @@ export default function FutureSelfReviewScreen() {
     setError(null);
     setSubmitting(true);
     try {
-      await approveFutureSelf(user.token);
+      await approveFutureSelf();
       router.replace("/(onboarding)/goal");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Bir hata oluştu.";
       setError(message);
-      Alert.alert("Onaylanamadı", message);
+      alert("Onaylanamadı", message);
     } finally {
       setSubmitting(false);
     }
@@ -106,7 +107,7 @@ const styles = StyleSheet.create({
   tags: { flexDirection: "row", flexWrap: "wrap", gap: theme.space.sm, marginTop: theme.space.lg },
   tag: {
     fontSize: theme.font.size.xs,
-    color: theme.color.inkMuted,
+    color: theme.color.ink40,
     backgroundColor: theme.color.surface.sunken,
     paddingHorizontal: theme.space.md,
     paddingVertical: theme.space.xs,

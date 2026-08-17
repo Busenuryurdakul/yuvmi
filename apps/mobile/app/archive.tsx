@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { Image } from "expo-image";
 import { router } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 import { Screen } from "@/components/ui/Screen";
 import { Card } from "@/components/ui/Card";
+import { alert } from "@/lib/alert";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
@@ -34,7 +36,7 @@ export default function ArchiveScreen() {
   const load = useCallback(async () => {
     if (!user?.token) return;
     try {
-      setAssets(await fetchMyAssets(user.token));
+      setAssets(await fetchMyAssets());
     } catch {
       setAssets([]);
     } finally {
@@ -50,7 +52,7 @@ export default function ArchiveScreen() {
     if (!user?.token) return;
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert("İzin gerekli", "Galeri erişimi olmadan yükleme yapılamaz.");
+      alert("İzin gerekli", "Galeri erişimi olmadan yükleme yapılamaz.");
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -63,10 +65,10 @@ export default function ArchiveScreen() {
     try {
       const name = file.fileName ?? `image-${Date.now()}.jpg`;
       const type = file.mimeType ?? "image/jpeg";
-      await uploadAsset(user.token, { uri: file.uri, name, type });
+      await uploadAsset({ uri: file.uri, name, type });
       await load();
     } catch (e) {
-      Alert.alert("Hata", e instanceof Error ? e.message : "Yükleme başarısız.");
+      alert("Hata", e instanceof Error ? e.message : "Yükleme başarısız.");
     } finally {
       setUploading(false);
     }
@@ -82,14 +84,14 @@ export default function ArchiveScreen() {
     const file = result.assets[0];
     setUploading(true);
     try {
-      await uploadAsset(user.token, {
+      await uploadAsset({
         uri: file.uri,
         name: file.name,
         type: file.mimeType ?? "application/pdf",
       });
       await load();
     } catch (e) {
-      Alert.alert("Hata", e instanceof Error ? e.message : "Yükleme başarısız.");
+      alert("Hata", e instanceof Error ? e.message : "Yükleme başarısız.");
     } finally {
       setUploading(false);
     }
@@ -98,7 +100,7 @@ export default function ArchiveScreen() {
   if (loading) return <LoadingScreen />;
 
   return (
-    <Screen>
+    <Screen scroll={false}>
       <Button label="← Geri" variant="ghost" fullWidth={false} onPress={() => router.back()} />
       <PageHeader
         title="Arşiv"
@@ -110,15 +112,20 @@ export default function ArchiveScreen() {
         <Button label="Belge yükle" variant="secondary" loading={uploading} onPress={pickDocument} />
       </View>
 
-      {assets.length === 0 ? (
-        <EmptyState
-          emoji="📁"
-          title="Arşiv boş"
-          description="Vizyon kartları, PDF'ler veya fotoğraflarını buraya ekle."
-        />
-      ) : (
-        assets.map((asset) => (
-          <Pressable key={asset.id} onPress={() => router.push(`/asset/${asset.id}`)}>
+      <FlatList
+        data={assets}
+        keyExtractor={(asset) => asset.id}
+        style={styles.list}
+        contentContainerStyle={assets.length === 0 ? styles.emptyContainer : styles.listContent}
+        ListEmptyComponent={
+          <EmptyState
+            emoji="📁"
+            title="Arşiv boş"
+            description="Vizyon kartları, PDF'ler veya fotoğraflarını buraya ekle."
+          />
+        }
+        renderItem={({ item: asset }) => (
+          <Pressable onPress={() => router.push(`/asset/${asset.id}`)}>
             <Card style={styles.card}>
               <View style={styles.row}>
                 {asset.type === "image" && asset.url && user?.token ? (
@@ -128,6 +135,7 @@ export default function ArchiveScreen() {
                       headers: { Authorization: `Bearer ${user.token}` },
                     }}
                     style={styles.thumb}
+                    cachePolicy="disk"
                   />
                 ) : (
                   <View style={styles.docThumb}>
@@ -144,14 +152,17 @@ export default function ArchiveScreen() {
               </View>
             </Card>
           </Pressable>
-        ))
-      )}
+        )}
+      />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   actions: { gap: theme.space.sm, marginBottom: theme.space.lg },
+  list: { flex: 1 },
+  listContent: { paddingBottom: theme.space.xl },
+  emptyContainer: { flexGrow: 1 },
   card: { marginBottom: theme.space.md },
   row: { flexDirection: "row", gap: theme.space.md, alignItems: "center" },
   thumb: { width: 56, height: 56, borderRadius: theme.radius.sm, backgroundColor: theme.color.surface.sunken },
@@ -171,5 +182,5 @@ const styles = StyleSheet.create({
     color: theme.color.text.primary,
   },
   meta: { marginTop: theme.space.xs, fontSize: theme.font.size.xs, color: theme.color.text.secondary },
-  revoked: { marginTop: theme.space.xs, fontSize: theme.font.size.xs, color: theme.color.destructive },
+  revoked: { marginTop: theme.space.xs, fontSize: theme.font.size.xs, color: theme.color.danger },
 });

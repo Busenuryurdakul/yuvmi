@@ -121,5 +121,8 @@ func (r *EndpointRepo) ListByApp(ctx context.Context, appID uuid.UUID, offset, l
 		}
 		endpoints = append(endpoints, &ep)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, domainErr.New(domainErr.ErrInternal, "failed to iterate endpoints", err)
+	}
 	return endpoints, total, nil
 }

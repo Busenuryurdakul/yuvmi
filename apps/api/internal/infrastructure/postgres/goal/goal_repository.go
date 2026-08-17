@@ -3,16 +3,28 @@ package goal
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
 	"github.com/masterfabric-go/masterfabric/internal/domain/goal/model"
 )
 
-type GoalRepo struct{ db *pgxpool.Pool }
+// querier is satisfied by both *pgxpool.Pool and pgx.Tx, so these
+// repositories can run either against the pool directly or against a
+// caller-supplied transaction (see PlanRepo.ActivatePlanTx).
+type querier interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Begin(ctx context.Context) (pgx.Tx, error)
+}
+
+type GoalRepo struct{ db querier }
 
 func NewGoalRepo(db *pgxpool.Pool) *GoalRepo { return &GoalRepo{db: db} }
 
@@ -72,10 +84,15 @@ func (r *GoalRepo) Activate(ctx context.Context, userID, goalID uuid.UUID) error
 		return domainErr.New(domainErr.ErrInternal, "failed to begin tx", err)
 	}
 	defer tx.Rollback(ctx)
-	_, _ = tx.Exec(ctx, `UPDATE goals SET status='archived', updated_at=NOW() WHERE user_id=$1 AND status='active'`, userID)
+	if _, err := tx.Exec(ctx, `UPDATE goals SET status='archived', updated_at=NOW() WHERE user_id=$1 AND status='active'`, userID); err != nil {
+		return domainErr.New(domainErr.ErrInternal, "failed to archive active goals", err)
+	}
 	tag, err := tx.Exec(ctx, `UPDATE goals SET status='active', updated_at=NOW() WHERE id=$1 AND user_id=$2`, goalID, userID)
-	if err != nil || tag.RowsAffected() == 0 {
-		return domainErr.New(domainErr.ErrNotFound, "goal not found", err)
+	if err != nil {
+		return domainErr.New(domainErr.ErrInternal, "failed to activate goal", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domainErr.New(domainErr.ErrNotFound, "goal not found", nil)
 	}
 	return tx.Commit(ctx)
 }
@@ -101,7 +118,7 @@ func (r *GoalRepo) CountByUserID(ctx context.Context, userID uuid.UUID) (int, er
 	return count, nil
 }
 
-type PlanRepo struct{ db *pgxpool.Pool }
+type PlanRepo struct{ db querier }
 
 func NewPlanRepo(db *pgxpool.Pool) *PlanRepo { return &PlanRepo{db: db} }
 
@@ -167,8 +184,11 @@ func (r *PlanRepo) GetByID(ctx context.Context, userID, planID uuid.UUID) (*mode
 func (r *PlanRepo) Activate(ctx context.Context, userID, planID uuid.UUID) error {
 	tag, err := r.db.Exec(ctx, `
 		UPDATE plans SET status='active', updated_at=NOW() WHERE id=$1 AND user_id=$2`, planID, userID)
-	if err != nil || tag.RowsAffected() == 0 {
-		return domainErr.New(domainErr.ErrNotFound, "plan not found", err)
+	if err != nil {
+		return domainErr.New(domainErr.ErrInternal, "failed to activate plan", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domainErr.New(domainErr.ErrNotFound, "plan not found", nil)
 	}
 	return nil
 }
@@ -177,29 +197,97 @@ func (r *PlanRepo) SupersedeOthers(ctx context.Context, userID, planID uuid.UUID
 	_, err := r.db.Exec(ctx, `
 		UPDATE plans SET status='superseded', updated_at=NOW()
 		WHERE user_id=$1 AND id<>$2 AND status='active'`, userID, planID)
-	return err
+	if err != nil {
+		return domainErr.New(domainErr.ErrInternal, "failed to supersede plans", err)
+	}
+	return nil
 }
 
+// ActivatePlanTx runs plan activation and its correlated writes — superseding
+// the user's other active plans, activating planID, creating its day-one
+// task, and (when goalID is set) activating the linked goal — inside a
+// single transaction. Without this, a mid-flight failure (e.g. the task
+// insert) could leave the plan active with no daily task, or a goal
+// activated with no active plan behind it, stranding the user mid-onboarding.
+func (r *PlanRepo) ActivatePlanTx(ctx context.Context, userID, planID uuid.UUID, goalID *uuid.UUID, task *model.DailyTask) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return domainErr.New(domainErr.ErrInternal, "failed to begin tx", err)
+	}
+	defer tx.Rollback(ctx)
+
+	txPlans := &PlanRepo{db: tx}
+	if err := txPlans.SupersedeOthers(ctx, userID, planID); err != nil {
+		return fmt.Errorf("supersede plans: %w", err)
+	}
+	if err := txPlans.Activate(ctx, userID, planID); err != nil {
+		return fmt.Errorf("activate plan: %w", err)
+	}
+
+	txTasks := &TaskRepo{db: tx}
+	if err := txTasks.Create(ctx, task); err != nil {
+		return fmt.Errorf("create daily task: %w", err)
+	}
+
+	if goalID != nil {
+		txGoals := &GoalRepo{db: tx}
+		if err := txGoals.Activate(ctx, userID, *goalID); err != nil {
+			return fmt.Errorf("activate goal: %w", err)
+		}
+	}
+
+	return tx.Commit(ctx)
+}
+
+// ListByUserID fetches every plan for the user together with its steps in a
+// single JOIN query, instead of one attachSteps round-trip per plan (N+1)
+// run while the outer plans cursor was still open.
 func (r *PlanRepo) ListByUserID(ctx context.Context, userID uuid.UUID) ([]*model.Plan, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT id, user_id, goal_id, title, description, status, version, created_at, updated_at
-		FROM plans WHERE user_id=$1 ORDER BY version DESC, created_at DESC`, userID)
+		SELECT p.id, p.user_id, p.goal_id, p.title, p.description, p.status, p.version, p.created_at, p.updated_at,
+		       s.id, s.day_offset, s.title, s.description, s.sort_order
+		FROM plans p
+		LEFT JOIN plan_steps s ON s.plan_id = p.id
+		WHERE p.user_id=$1
+		ORDER BY p.version DESC, p.created_at DESC, s.day_offset, s.sort_order`, userID)
 	if err != nil {
 		return nil, domainErr.New(domainErr.ErrInternal, "failed to list plans", err)
 	}
 	defer rows.Close()
 
 	var plans []*model.Plan
+	byID := make(map[uuid.UUID]*model.Plan)
 	for rows.Next() {
-		p, err := r.scanPlan(rows)
-		if err != nil {
-			return nil, err
+		var p model.Plan
+		var stepID *uuid.UUID
+		var dayOffset, sortOrder *int
+		var stepTitle, stepDesc *string
+		if err := rows.Scan(
+			&p.ID, &p.UserID, &p.GoalID, &p.Title, &p.Description, &p.Status, &p.Version, &p.CreatedAt, &p.UpdatedAt,
+			&stepID, &dayOffset, &stepTitle, &stepDesc, &sortOrder,
+		); err != nil {
+			return nil, domainErr.New(domainErr.ErrInternal, "failed to scan plan", err)
 		}
-		p, err = r.attachSteps(ctx, p)
-		if err != nil {
-			return nil, err
+
+		plan, ok := byID[p.ID]
+		if !ok {
+			plan = &p
+			byID[p.ID] = plan
+			plans = append(plans, plan)
 		}
-		plans = append(plans, p)
+		if stepID != nil {
+			plan.Steps = append(plan.Steps, model.PlanStep{
+				ID:          *stepID,
+				PlanID:      plan.ID,
+				DayOffset:   *dayOffset,
+				Title:       *stepTitle,
+				Description: *stepDesc,
+				SortOrder:   *sortOrder,
+			})
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, domainErr.New(domainErr.ErrInternal, "failed to list plans", err)
 	}
 	return plans, nil
 }
@@ -243,10 +331,13 @@ func (r *PlanRepo) attachSteps(ctx context.Context, plan *model.Plan) (*model.Pl
 		}
 		plan.Steps = append(plan.Steps, s)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, domainErr.New(domainErr.ErrInternal, "failed to iterate plan steps", err)
+	}
 	return plan, nil
 }
 
-type TaskRepo struct{ db *pgxpool.Pool }
+type TaskRepo struct{ db querier }
 
 func NewTaskRepo(db *pgxpool.Pool) *TaskRepo { return &TaskRepo{db: db} }
 
@@ -277,26 +368,26 @@ func (r *TaskRepo) GetByID(ctx context.Context, userID, taskID uuid.UUID) (*mode
 		FROM daily_tasks WHERE id=$1 AND user_id=$2`, taskID, userID))
 }
 
-func (r *TaskRepo) Complete(ctx context.Context, userID, taskID uuid.UUID) error {
+func (r *TaskRepo) Complete(ctx context.Context, userID, taskID uuid.UUID) (bool, error) {
 	tag, err := r.db.Exec(ctx, `
 		UPDATE daily_tasks SET status='completed', completed_at=NOW(), updated_at=NOW()
 		WHERE id=$1 AND user_id=$2 AND status='pending'`, taskID, userID)
 	if err != nil {
-		return domainErr.New(domainErr.ErrInternal, "failed to complete task", err)
+		return false, domainErr.New(domainErr.ErrInternal, "failed to complete task", err)
 	}
 	if tag.RowsAffected() > 0 {
-		return nil
+		return true, nil
 	}
-	// Idempotent: already completed or skipped — treat as success.
+	// Idempotent: already completed or skipped — treat as success, no transition.
 	var status string
 	err = r.db.QueryRow(ctx, `SELECT status FROM daily_tasks WHERE id=$1 AND user_id=$2`, taskID, userID).Scan(&status)
 	if err != nil {
-		return domainErr.New(domainErr.ErrNotFound, "task not found", err)
+		return false, domainErr.New(domainErr.ErrNotFound, "task not found", err)
 	}
 	if status == "completed" || status == "skipped" {
-		return nil
+		return false, nil
 	}
-	return domainErr.New(domainErr.ErrNotFound, "task not found", nil)
+	return false, domainErr.New(domainErr.ErrNotFound, "task not found", nil)
 }
 
 func (r *TaskRepo) Skip(ctx context.Context, userID, taskID uuid.UUID, reason *string) error {
@@ -335,6 +426,9 @@ func (r *TaskRepo) ListRecent(ctx context.Context, userID uuid.UUID, since time.
 			return nil, err
 		}
 		tasks = append(tasks, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return tasks, nil
 }

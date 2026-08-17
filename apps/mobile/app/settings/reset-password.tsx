@@ -1,9 +1,10 @@
-import { Alert, StyleSheet, Text, TextInput, View } from "react-native";
+import { StyleSheet, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { Screen } from "@/components/ui/Screen";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { alert } from "@/lib/alert";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { resetPassword } from "@/lib/api/yuvmi";
 import { ApiError } from "@/lib/api/client";
@@ -17,25 +18,25 @@ export default function ResetPasswordScreen() {
 
   async function handleSubmit() {
     if (password.length < 8) {
-      Alert.alert("Hata", "Şifre en az 8 karakter olmalı.");
+      alert("Hata", "Şifre en az 8 karakter olmalı.");
       return;
     }
     if (password !== confirm) {
-      Alert.alert("Hata", "Şifreler eşleşmiyor.");
+      alert("Hata", "Şifreler eşleşmiyor.");
       return;
     }
     if (!token) {
-      Alert.alert("Hata", "Geçersiz sıfırlama bağlantısı.");
+      alert("Hata", "Geçersiz sıfırlama bağlantısı.");
       return;
     }
 
     setLoading(true);
     try {
       await resetPassword(token, password);
-      Alert.alert("Tamam", "Şifren güncellendi.", [{ text: "Giriş yap", onPress: () => router.replace("/(auth)/welcome") }]);
+      alert("Tamam", "Şifren güncellendi.", [{ text: "Giriş yap", onPress: () => router.replace("/(auth)/welcome") }]);
     } catch (error) {
       const message = error instanceof ApiError ? error.message : "Sıfırlama başarısız.";
-      Alert.alert("Hata", message);
+      alert("Hata", message);
     } finally {
       setLoading(false);
     }

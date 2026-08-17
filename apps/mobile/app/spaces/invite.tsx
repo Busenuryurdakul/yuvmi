@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { SubpageScreen } from "@/components/ui/SubpageScreen";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { PickGroup } from "@/components/ui/PickGroup";
+import { alert } from "@/lib/alert";
 import { Button } from "@/components/ui/Button";
 import { Glass, Eyebrow } from "@/components/ui/Glass";
 import { Switch } from "@/components/ui/Switch";
@@ -34,22 +35,22 @@ export default function SpaceInviteScreen() {
     if (!user?.token) return;
     const trimmed = email.trim();
     if (!trimmed.includes("@")) {
-      Alert.alert("Eksik bilgi", "Geçerli bir e-posta adresi gir.");
+      alert("Eksik bilgi", "Geçerli bir e-posta adresi gir.");
       return;
     }
     setLoading(true);
     try {
       let id = spaceId;
       if (!id) {
-        const space = await createSpace(user.token, { type: ROLE_TO_TYPE[role] ?? "couple" });
+        const space = await createSpace({ type: ROLE_TO_TYPE[role] ?? "couple" });
         id = space.id;
       }
-      await createSpaceInvite(user.token, id, trimmed);
-      Alert.alert("Davet gönderildi", "Karşı taraf onayladığında alan aktif olur.", [
+      await createSpaceInvite(id, trimmed);
+      alert("Davet gönderildi", "Karşı taraf onayladığında alan aktif olur.", [
         { text: "Tamam", onPress: () => router.back() },
       ]);
     } catch (e) {
-      Alert.alert("Hata", e instanceof Error ? e.message : "Davet gönderilemedi.");
+      alert("Hata", e instanceof Error ? e.message : "Davet gönderilemedi.");
     } finally {
       setLoading(false);
     }

@@ -124,6 +124,19 @@ type DailyTaskResponse struct {
 	Status        goalmodel.TaskStatus `json:"status"`
 	CompletedAt   *time.Time          `json:"completedAt,omitempty"`
 	SkippedReason *string             `json:"skippedReason,omitempty"`
+	PearlBalance  *int                `json:"pearlBalance,omitempty"`
+}
+
+// PearlBalanceResponse reports the user's current İnci (pearl) balance.
+type PearlBalanceResponse struct {
+	Balance int `json:"balance"`
+}
+
+// PearlAwardResponse reports the outcome of an attempted pearl award —
+// Awarded is false when the action's daily cap has already been reached.
+type PearlAwardResponse struct {
+	Balance int  `json:"balance"`
+	Awarded bool `json:"awarded"`
 }
 
 type SkipTaskRequest struct {

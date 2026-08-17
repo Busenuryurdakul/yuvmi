@@ -60,6 +60,9 @@ func (r *SpaceRepo) ListByUserID(ctx context.Context, userID uuid.UUID) ([]*mode
 		}
 		out = append(out, s)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, domainErr.New(domainErr.ErrInternal, "failed to iterate spaces", err)
+	}
 	return out, nil
 }
 
@@ -120,6 +123,9 @@ func (r *SpaceRepo) ListMembers(ctx context.Context, spaceID uuid.UUID) ([]model
 			return nil, domainErr.New(domainErr.ErrInternal, "failed to scan member", err)
 		}
 		out = append(out, sm)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, domainErr.New(domainErr.ErrInternal, "failed to iterate members", err)
 	}
 	return out, nil
 }
@@ -201,6 +207,9 @@ func (r *SpaceRepo) ListPendingInvitesByEmail(ctx context.Context, email string)
 		}
 		out = append(out, v)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, domainErr.New(domainErr.ErrInternal, "failed to iterate invites", err)
+	}
 	return out, nil
 }
 
@@ -220,6 +229,9 @@ func (r *SpaceRepo) ListPendingInvitesBySpace(ctx context.Context, spaceID uuid.
 			return nil, err
 		}
 		out = append(out, *inv)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, domainErr.New(domainErr.ErrInternal, "failed to iterate space invites", err)
 	}
 	return out, nil
 }

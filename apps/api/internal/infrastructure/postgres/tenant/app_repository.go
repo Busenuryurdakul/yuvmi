@@ -115,5 +115,8 @@ func (r *AppRepo) ListByOrg(ctx context.Context, orgID uuid.UUID, offset, limit 
 		}
 		apps = append(apps, &a)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, domainErr.New(domainErr.ErrInternal, "failed to list apps", err)
+	}
 	return apps, total, nil
 }

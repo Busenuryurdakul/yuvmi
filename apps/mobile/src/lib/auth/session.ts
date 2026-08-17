@@ -1,7 +1,19 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
+import { z } from "zod";
 import { AUTH_STORAGE_KEY, type AuthUser } from "./types";
+
+const authUserSchema = z.object({
+  id: z.string(),
+  email: z.string(),
+  displayName: z.string(),
+  provider: z.enum(["google", "apple", "email"]),
+  avatarUrl: z.string().optional(),
+  token: z.string(),
+  refreshToken: z.string().optional(),
+  onboardingComplete: z.boolean(),
+}) satisfies z.ZodType<AuthUser>;
 
 async function getItem(key: string): Promise<string | null> {
   if (Platform.OS === "web") {
@@ -30,7 +42,8 @@ export async function loadStoredSession(): Promise<AuthUser | null> {
   try {
     const raw = await getItem(AUTH_STORAGE_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as AuthUser;
+    const result = authUserSchema.safeParse(JSON.parse(raw));
+    return result.success ? result.data : null;
   } catch {
     return null;
   }

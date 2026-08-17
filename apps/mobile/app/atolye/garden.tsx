@@ -1,18 +1,19 @@
 import { useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import { SubpageScreen } from "@/components/ui/SubpageScreen";
 import { Glass, Eyebrow } from "@/components/ui/Glass";
 import { useMode } from "@/context/ModeContext";
+import { alert } from "@/lib/alert";
 import { theme } from "@/theme";
 
 type Plant = { emoji: string; name: string; pct: number; status: string; sleep?: boolean };
 
 const INITIAL_PLANTS: Plant[] = [
-  { emoji: "🪸", name: "polip", pct: 79, status: "olgun · %79" },
+  { emoji: "🪸", name: "mercan polibi", pct: 79, status: "olgun · %79" },
   { emoji: "🪼", name: "denizanası", pct: 43, status: "fide · %43" },
-  { emoji: "🐚", name: "deniz kabuğu", pct: 64, status: "gelişiyor · %64" },
-  { emoji: "🐡", name: "balık", pct: 0, status: "uykuda · denemede", sleep: true },
+  { emoji: "🦐", name: "karides kolonisi", pct: 64, status: "gelişiyor · %64" },
+  { emoji: "🐡", name: "balon balığı", pct: 0, status: "uykuda · denemede", sleep: true },
 ];
 
 const TOTAL_PLOTS = 12;
@@ -30,12 +31,12 @@ export default function GardenScreen() {
     if (watered) return;
     setPlants((prev) =>
       prev.map((p) =>
-        p.sleep ? { ...p, sleep: false, emoji: "🐚", status: "fide · uykudan uyandı" } : p,
+        p.sleep ? { ...p, sleep: false, status: "fide · uykudan uyandı" } : p,
       ),
     );
     setWatered(true);
     void patchPrefs({ tohum: tohum + 1 });
-    Alert.alert("+1 İnci 🫧", "Gel-git akıntısı polipleri ve mercanları canlandırdı.");
+    alert("+1 İnci 🫧", "Gel-git akıntısı polipleri ve mercanları canlandırdı.");
   }
 
   return (
@@ -56,7 +57,7 @@ export default function GardenScreen() {
                   key={i}
                   style={[styles.plot, plant.sleep && styles.plotSleep]}
                   onPress={() =>
-                    Alert.alert(
+                    alert(
                       plant.name,
                       plant.sleep
                         ? `${plant.name} uykuda — tek bir minimum onu uyandırır.`

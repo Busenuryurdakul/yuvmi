@@ -1,42 +1,80 @@
-import { useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
-import { router, type Href } from "expo-router";
+import { useCallback, useState } from "react";
+import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { router, useFocusEffect, type Href } from "expo-router";
 import { Screen } from "@/components/ui/Screen";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Eyebrow, Glass } from "@/components/ui/Glass";
 import { TapRow } from "@/components/ui/TapRow";
 import { Button } from "@/components/ui/Button";
+import { useAuth } from "@/context/AuthContext";
 import { useMode } from "@/context/ModeContext";
+import { fetchPearlBalance } from "@/lib/api/yuvmi";
 import { theme } from "@/theme";
 
 export default function AtolyeScreen() {
+  const { user } = useAuth();
   const { prefs, patchPrefs } = useMode();
-  const tohum = prefs?.tohum ?? 48; // Treated as İnci balance
+  const tohum = prefs?.tohum ?? 48; // İnci balance — synced from backend, spent locally
+  const [balanceSheetOpen, setBalanceSheetOpen] = useState(false);
 
-  function handleBalancePress() {
-    Alert.alert(
-      "İnci Göstergesi 🫧",
-      "Kıyıya vuranlar dükkanına mı yoksa Mercan Bahçesi'ne mi gitmek istersin?",
-      [
-        { text: "Kıyıya Vuranlar (Dükkân)", onPress: () => router.push("/atolye/shop") },
-        { text: "Mercan Bahçesi", onPress: () => router.push("/atolye/garden") },
-        { text: "İptal", style: "cancel" },
-      ]
-    );
-  }
+  useFocusEffect(
+    useCallback(() => {
+      if (!user?.token) return;
+      fetchPearlBalance()
+        .then((res) => void patchPrefs({ tohum: res.balance }))
+        .catch(() => {});
+    }, [user?.token]),
+  );
 
   return (
     <Screen tabBar>
       <PageHeader
         eyebrow="Atölyen"
         eyebrowRight={
-          <Pressable onPress={handleBalancePress} style={styles.balance}>
+          <Pressable onPress={() => setBalanceSheetOpen(true)} style={styles.balance}>
             <Text style={styles.balanceText}>🫧 {tohum} İnci</Text>
           </Pressable>
         }
         title="Atölye"
         subtitle="Kişisel gelişim sistemlerini ve niyet araçlarını tasarladığın alan."
       />
+
+      <Modal
+        visible={balanceSheetOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setBalanceSheetOpen(false)}
+      >
+        <Pressable style={styles.sheetBackdrop} onPress={() => setBalanceSheetOpen(false)}>
+          <Pressable style={styles.sheetCard} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.sheetTitle}>İnci Göstergesi 🫧</Text>
+            <Text style={styles.sheetBody}>
+              Kıyıya vuranlar dükkanına mı yoksa Mercan Bahçesi'ne mi gitmek istersin?
+            </Text>
+            <Pressable
+              style={styles.sheetOption}
+              onPress={() => {
+                setBalanceSheetOpen(false);
+                router.push("/atolye/shop");
+              }}
+            >
+              <Text style={styles.sheetOptionText}>Kıyıya Vuranlar (Dükkân)</Text>
+            </Pressable>
+            <Pressable
+              style={styles.sheetOption}
+              onPress={() => {
+                setBalanceSheetOpen(false);
+                router.push("/atolye/garden");
+              }}
+            >
+              <Text style={styles.sheetOptionText}>Mercan Bahçesi</Text>
+            </Pressable>
+            <Pressable style={styles.sheetCancel} onPress={() => setBalanceSheetOpen(false)}>
+              <Text style={styles.sheetCancelText}>İptal</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         {/* 1. OLUŞTUR */}
@@ -148,5 +186,54 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: theme.color.ink70,
     lineHeight: 19,
+  },
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(11,18,32,0.35)",
+    justifyContent: "flex-end",
+  },
+  sheetCard: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: theme.radius.sheet,
+    borderTopRightRadius: theme.radius.sheet,
+    paddingHorizontal: 20,
+    paddingTop: 22,
+    paddingBottom: 34,
+  },
+  sheetTitle: {
+    fontFamily: theme.font.sansBold,
+    fontWeight: theme.font.weight.bold,
+    fontSize: 16,
+    color: theme.color.ink,
+    marginBottom: 6,
+  },
+  sheetBody: {
+    fontFamily: theme.font.sans,
+    fontSize: 13.5,
+    color: theme.color.ink70,
+    lineHeight: 19,
+    marginBottom: 16,
+  },
+  sheetOption: {
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: theme.color.edge,
+  },
+  sheetOptionText: {
+    fontFamily: theme.font.sansSemibold,
+    fontWeight: theme.font.weight.semibold,
+    fontSize: 15,
+    color: theme.color.blueDeep,
+    textAlign: "center",
+  },
+  sheetCancel: {
+    paddingVertical: 14,
+    marginTop: 4,
+  },
+  sheetCancelText: {
+    fontFamily: theme.font.sans,
+    fontSize: 15,
+    color: theme.color.ink40,
+    textAlign: "center",
   },
 });

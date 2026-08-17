@@ -2,9 +2,9 @@ import { fetchCurrentGoal, fetchActivePlan, fetchFutureSelf } from "@/lib/api/yu
 import type { Href } from "expo-router";
 
 /** Kullanıcının onboarding'de kaldığı adımı belirle */
-export async function resolveOnboardingHref(token: string): Promise<Href> {
+export async function resolveOnboardingHref(): Promise<Href> {
   try {
-    const fs = await fetchFutureSelf(token);
+    const fs = await fetchFutureSelf();
     if (fs.status === "draft") {
       return "/(onboarding)/future-self-review";
     }
@@ -13,13 +13,13 @@ export async function resolveOnboardingHref(token: string): Promise<Href> {
   }
 
   try {
-    await fetchCurrentGoal(token);
+    await fetchCurrentGoal();
   } catch {
     return "/(onboarding)/goal";
   }
 
   try {
-    await fetchActivePlan(token);
+    await fetchActivePlan();
     return "/(onboarding)/plan";
   } catch {
     return "/(onboarding)/plan";

@@ -145,7 +145,7 @@ const styles = StyleSheet.create({
   },
   tag: {
     fontSize: theme.font.size.xs,
-    color: theme.color.inkMuted,
+    color: theme.color.ink40,
     backgroundColor: theme.color.surface.sunken,
     paddingHorizontal: theme.space.md,
     paddingVertical: theme.space.xs,
