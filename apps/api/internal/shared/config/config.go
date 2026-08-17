@@ -55,13 +55,20 @@ func (c *Config) unsafeDefaults() []string {
 		problems = append(problems,
 			"JWT_SECRET is empty or still the built-in default; anyone can forge authentication tokens")
 	}
-	if c.Database.Password == DefaultDBPassword {
-		problems = append(problems,
-			`DB_PASSWORD is still the built-in default "yuvmi"`)
-	}
-	if strings.EqualFold(strings.TrimSpace(c.Database.SSLMode), "disable") {
-		problems = append(problems,
-			`DB_SSLMODE is "disable"; the database connection is unencrypted`)
+	if c.Database.URL == "" {
+		if c.Database.Password == DefaultDBPassword {
+			problems = append(problems,
+				`DB_PASSWORD is still the built-in default "yuvmi"`)
+		}
+		if strings.EqualFold(strings.TrimSpace(c.Database.SSLMode), "disable") {
+			problems = append(problems,
+				`DB_SSLMODE is "disable"; the database connection is unencrypted`)
+		}
+	} else {
+		if strings.Contains(strings.ToLower(c.Database.URL), "sslmode=disable") {
+			problems = append(problems,
+				`DATABASE_URL has sslmode=disable; the database connection is unencrypted`)
+		}
 	}
 
 	return problems
@@ -112,6 +119,7 @@ type ServerConfig struct {
 
 // DatabaseConfig holds PostgreSQL connection settings.
 type DatabaseConfig struct {
+	URL      string
 	Host     string
 	Port     int
 	User     string
@@ -124,6 +132,9 @@ type DatabaseConfig struct {
 
 // DSN returns the PostgreSQL connection string with escaped credentials.
 func (d DatabaseConfig) DSN() string {
+	if d.URL != "" {
+		return d.URL
+	}
 	u := url.URL{
 		Scheme: "postgres",
 		User:   url.UserPassword(d.User, d.Password),
@@ -232,16 +243,7 @@ func Load() *Config {
 			MaxBodyBytes:       envOrDefaultInt64("MAX_BODY_BYTES", 1<<20),
 			MetricsToken:       envOrDefault("METRICS_TOKEN", ""),
 		},
-		Database: DatabaseConfig{
-			Host:     envOrDefault("DB_HOST", "localhost"),
-			Port:     envOrDefaultInt("DB_PORT", 5432),
-			User:     envOrDefault("DB_USER", "yuvmi"),
-			Password: envOrDefault("DB_PASSWORD", DefaultDBPassword),
-			DBName:   envOrDefault("DB_NAME", "yuvmi"),
-			SSLMode:  envOrDefault("DB_SSLMODE", "disable"),
-			MaxConns: envOrDefaultInt32("DB_MAX_CONNS", 25),
-			MinConns: envOrDefaultInt32("DB_MIN_CONNS", 5),
-		},
+		Database: loadDatabaseConfig(),
 		Redis: RedisConfig{
 			Host:     envOrDefault("REDIS_HOST", "localhost"),
 			Port:     envOrDefaultInt("REDIS_PORT", 6379),
@@ -383,6 +385,52 @@ func loadEnvFile() {
 			}
 		}
 		return
+	}
+}
+
+func loadDatabaseConfig() DatabaseConfig {
+	rawURL := envOrDefault("DATABASE_URL", "")
+	if rawURL != "" {
+		if u, err := url.Parse(rawURL); err == nil && u.Host != "" {
+			host := u.Hostname()
+			port := 5432
+			if p, err := strconv.Atoi(u.Port()); err == nil && p > 0 {
+				port = p
+			}
+			user := ""
+			password := ""
+			if u.User != nil {
+				user = u.User.Username()
+				password, _ = u.User.Password()
+			}
+			dbname := strings.TrimPrefix(u.Path, "/")
+			sslMode := u.Query().Get("sslmode")
+			if sslMode == "" {
+				sslMode = "require"
+			}
+			return DatabaseConfig{
+				URL:      rawURL,
+				Host:     host,
+				Port:     port,
+				User:     user,
+				Password: password,
+				DBName:   dbname,
+				SSLMode:  sslMode,
+				MaxConns: envOrDefaultInt32("DB_MAX_CONNS", 25),
+				MinConns: envOrDefaultInt32("DB_MIN_CONNS", 5),
+			}
+		}
+	}
+
+	return DatabaseConfig{
+		Host:     envOrDefault("DB_HOST", "localhost"),
+		Port:     envOrDefaultInt("DB_PORT", 5432),
+		User:     envOrDefault("DB_USER", "yuvmi"),
+		Password: envOrDefault("DB_PASSWORD", DefaultDBPassword),
+		DBName:   envOrDefault("DB_NAME", "yuvmi"),
+		SSLMode:  envOrDefault("DB_SSLMODE", "disable"),
+		MaxConns: envOrDefaultInt32("DB_MAX_CONNS", 25),
+		MinConns: envOrDefaultInt32("DB_MIN_CONNS", 5),
 	}
 }
 

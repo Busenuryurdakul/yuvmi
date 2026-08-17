@@ -1,10 +1,3 @@
-databases:
-  - name: yuvmi-db
-    databaseName: yuvmi
-    user: yuvmi
-    plan: free
-    ipAllowList: []
-
 services:
   # Redis service for caching and rate limiting
   - type: redis
@@ -28,6 +21,8 @@ services:
         value: 0.0.0.0
       - key: SERVER_PORT
         value: 8080
+      - key: DATABASE_URL
+        sync: false
       - key: WAITLIST_CLIENT_IP_MODE
         value: render
       - key: RENDER_SERVICE_TYPE
@@ -50,28 +45,6 @@ services:
         value: "30"
       - key: CORS_ALLOWED_ORIGINS
         value: https://yuvmi.vercel.app,https://yuvmi-web.vercel.app
-      - key: DB_HOST
-        fromDatabase:
-          name: yuvmi-db
-          property: host
-      - key: DB_PORT
-        fromDatabase:
-          name: yuvmi-db
-          property: port
-      - key: DB_USER
-        fromDatabase:
-          name: yuvmi-db
-          property: user
-      - key: DB_PASSWORD
-        fromDatabase:
-          name: yuvmi-db
-          property: password
-      - key: DB_NAME
-        fromDatabase:
-          name: yuvmi-db
-          property: database
-      - key: DB_SSLMODE
-        value: require
       - key: REDIS_HOST
         fromService:
           type: redis
