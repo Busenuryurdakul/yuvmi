@@ -52,6 +52,12 @@ export function LandingHeader() {
           <LandingMobileNav />
 
           <Link
+            href="/app"
+            className="landing-focus-ring inline-flex rounded-full border border-foreground/12 bg-surface/70 px-3.5 py-2.5 text-sm font-medium transition hover:bg-surface"
+          >
+            Giriş
+          </Link>
+          <Link
             href="#bekleme"
             className="landing-focus-ring rounded-full bg-accent px-3.5 py-2.5 text-sm font-medium text-white transition hover:opacity-90 sm:px-5"
           >
