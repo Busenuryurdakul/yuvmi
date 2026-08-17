@@ -67,7 +67,7 @@ chore/ayse-ci-setup                 ← GitHub Actions
 | Web | `apps/web/` | Buse (`busenur`) |
 | Mobil | `apps/mobile/` | Ayşe (`ayse`) |
 | Shared tipler | `packages/shared/` | **İkisi de** — PR zorunlu, küçük PR |
-| Backend (Go) | `apps/api/` *(henüz yok)* | Geliştirici A veya B — Phase 1'de netleştir |
+| Backend (Go) | `apps/api/` *(henüz yok)* | Buse veya Ayşe — Phase 1'de netleştir |
 | Ürün / mimari | `docs/` | **İkisi de** — kararları PR açıklamasında yaz |
 
 Shared veya `docs/PRODUCT.md` değişecekse **önce kısa mesajla haberleş**, ardından PR aç.
