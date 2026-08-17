@@ -1,7 +1,9 @@
 package router
 
 import (
+	"crypto/subtle"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 
@@ -36,6 +38,67 @@ func maybeRequirePermission(rbac iamService.RBACService, permission string) func
 	return middleware.RequirePermission(rbac, permission)
 }
 
+// writeNotFound emits the single 404 body used for every unmatched route. It
+// deliberately says nothing about which subsystems exist or how endpoints are
+// registered.
+func writeNotFound(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusNotFound)
+	_, _ = w.Write([]byte(`{"error":"not found","code":404}`))
+}
+
+// bearerToken extracts the credential from an "Authorization: Bearer …" header.
+func bearerToken(r *http.Request) string {
+	const prefix = "Bearer "
+	header := r.Header.Get("Authorization")
+	if len(header) > len(prefix) && strings.EqualFold(header[:len(prefix)], prefix) {
+		return header[len(prefix):]
+	}
+	return ""
+}
+
+// isInternalAddr reports whether an address belongs to loopback, private or
+// link-local space.
+func isInternalAddr(remoteAddr string) bool {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		host = remoteAddr
+	}
+	ip := net.ParseIP(strings.Trim(host, "[]"))
+	if ip == nil {
+		return false
+	}
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast()
+}
+
+// internalOnly guards an operational endpoint that must never be public.
+//
+// When a token is configured the request has to present it as a bearer token —
+// that is the only check that survives a reverse proxy, since behind one
+// RemoteAddr reports the proxy rather than the caller. With no token the
+// endpoint is reachable only from loopback and private ranges.
+//
+// Rejections return 404 rather than 401/403 so the endpoint's existence is not
+// confirmed to unauthorized callers.
+func internalOnly(token string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var allowed bool
+			if token != "" {
+				allowed = subtle.ConstantTimeCompare([]byte(bearerToken(r)), []byte(token)) == 1
+			} else {
+				allowed = isInternalAddr(r.RemoteAddr)
+			}
+
+			if !allowed {
+				writeNotFound(w)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // Dependencies holds all injected dependencies for the router.
 type Dependencies struct {
 	Logger *slog.Logger
@@ -44,6 +107,10 @@ type Dependencies struct {
 
 	CORSAllowedOrigins []string
 	MaxBodyBytes       int64
+
+	// MetricsToken, when set, is the bearer token required to scrape /metrics.
+	// When empty, /metrics is restricted to loopback and private ranges.
+	MetricsToken string
 
 	// Services
 	AuthService iamService.AuthService
@@ -83,8 +150,8 @@ func New(deps Dependencies) *chi.Mux {
 	r.Get("/health/live", healthHandler.Liveness)
 	r.Get("/health/ready", healthHandler.Readiness)
 
-	// Prometheus metrics
-	r.Handle("/metrics", promhttp.Handler())
+	// Prometheus metrics — operational surface, never public.
+	r.With(internalOnly(deps.MetricsToken)).Handle("/metrics", promhttp.Handler())
 
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
@@ -154,12 +221,21 @@ func New(deps Dependencies) *chi.Mux {
 					r.Get("/", deps.YuvmiHandler.ListNotifications)
 					r.Get("/unread-count", deps.YuvmiHandler.GetUnreadNotificationCount)
 					r.Post("/{id}/read", deps.YuvmiHandler.MarkNotificationRead)
+					r.Post("/design/confirm", deps.YuvmiHandler.ConfirmNotificationDesign)
 				})
 
 				r.Route("/tasks", func(r chi.Router) {
 					r.Get("/today", deps.YuvmiHandler.GetTodayTask)
 					r.Post("/{id}/complete", deps.YuvmiHandler.CompleteTask)
 					r.Post("/{id}/skip", deps.YuvmiHandler.SkipTask)
+				})
+
+				r.Route("/pearls", func(r chi.Router) {
+					r.Get("/balance", deps.YuvmiHandler.GetPearlBalance)
+				})
+
+				r.Route("/waves", func(r chi.Router) {
+					r.Post("/survive", deps.YuvmiHandler.RecordWaveSurvived)
 				})
 
 				r.Route("/checkins", func(r chi.Router) {
@@ -297,37 +373,19 @@ func New(deps Dependencies) *chi.Mux {
 				r.With(maybeRequirePermission(deps.RBACService, "org:read")).Get("/users/{userId}/audit-logs", deps.AuditHandler.ListByUser)
 			}
 
-			// Catch-all handler for managed endpoints (must be last in the group)
-			// This allows the gateway pipeline to handle dynamic endpoints like /api/v1/products
-			// The gateway middleware will validate and return responses for managed endpoints
-			r.HandleFunc("/*", func(w http.ResponseWriter, r *http.Request) {
-				// Gateway middleware should have already handled this if it's a managed endpoint
-				// If we reach here, it means no endpoint was found, return 404
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusNotFound)
-				_, _ = w.Write([]byte(`{"error":"endpoint not found","code":404,"message":"No endpoint registered for this path. Define the endpoint first using POST /api/v1/organizations/{orgId}/apps/{appId}/endpoints"}`))
+			// Catch-all for managed endpoints (must be last in the group). The
+			// gateway pipeline answers anything it recognises before reaching
+			// here, so arriving at this point means no endpoint matched.
+			r.HandleFunc("/*", func(w http.ResponseWriter, _ *http.Request) {
+				writeNotFound(w)
 			})
 		})
 	})
 
-	// Catch-all handler for managed endpoints (must be after all specific routes)
-	// This allows the gateway pipeline to handle dynamic endpoints like /api/v1/products
-	// The gateway middleware will validate and return responses for managed endpoints
-	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
-		// If this is an API v1 path, let the gateway handle it (if it hasn't already)
-		// Otherwise return 404
-		if !strings.HasPrefix(r.URL.Path, "/api/v1") {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusNotFound)
-			_, _ = w.Write([]byte(`{"error":"not found","code":404}`))
-			return
-		}
-		
-		// For /api/v1 paths, check if gateway pipeline already handled it
-		// If not, return 404 (gateway would have returned response if endpoint existed)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		_, _ = w.Write([]byte(`{"error":"endpoint not found","code":404,"message":"No endpoint registered for this path. Define the endpoint first."}`))
+	// Anything not matched above — including /api/v1 paths the gateway pipeline
+	// did not claim — gets the same opaque 404.
+	r.NotFound(func(w http.ResponseWriter, _ *http.Request) {
+		writeNotFound(w)
 	})
 
 	return r

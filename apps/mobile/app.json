@@ -13,7 +13,6 @@
     },
     "android": {
       "package": "com.yuvmi.app",
-      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "backgroundColor": "#E7ECF9"
       },

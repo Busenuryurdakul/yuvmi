@@ -10,8 +10,19 @@ import (
 	"time"
 )
 
+// Development-only defaults. Running with any of these in production is
+// refused by Validate.
+const (
+	DefaultJWTSecret  = "change-me-in-production"
+	DefaultDBPassword = "yuvmi"
+)
+
 // Config holds all application configuration.
 type Config struct {
+	// Environment is the deployment environment: "development" (default),
+	// "staging" or "production". Only production is treated as strict.
+	Environment string
+
 	Server    ServerConfig
 	Database  DatabaseConfig
 	Redis     RedisConfig
@@ -23,6 +34,57 @@ type Config struct {
 	Kafka     KafkaConfig
 	WebSocket WebSocketConfig
 	Log       LogConfig
+}
+
+// IsProduction reports whether the process is running in production.
+func (c *Config) IsProduction() bool {
+	switch strings.ToLower(strings.TrimSpace(c.Environment)) {
+	case "production", "prod":
+		return true
+	default:
+		return false
+	}
+}
+
+// unsafeDefaults lists every configuration value still sitting on a
+// development-only default that would be dangerous in production.
+func (c *Config) unsafeDefaults() []string {
+	var problems []string
+
+	if c.JWT.Secret == "" || c.JWT.Secret == DefaultJWTSecret {
+		problems = append(problems,
+			"JWT_SECRET is empty or still the built-in default; anyone can forge authentication tokens")
+	}
+	if c.Database.Password == DefaultDBPassword {
+		problems = append(problems,
+			`DB_PASSWORD is still the built-in default "yuvmi"`)
+	}
+	if strings.EqualFold(strings.TrimSpace(c.Database.SSLMode), "disable") {
+		problems = append(problems,
+			`DB_SSLMODE is "disable"; the database connection is unencrypted`)
+	}
+
+	return problems
+}
+
+// Validate reports configuration that is unsafe to run with.
+//
+// In production it returns an error so the caller can refuse to start. In every
+// other environment the same findings are returned as warnings, so local
+// development keeps working with the defaults from .env.example.
+func (c *Config) Validate() (warnings []string, err error) {
+	problems := c.unsafeDefaults()
+	if len(problems) == 0 {
+		return nil, nil
+	}
+
+	if c.IsProduction() {
+		return nil, fmt.Errorf(
+			"refusing to start in %s with unsafe configuration:\n  - %s",
+			c.Environment, strings.Join(problems, "\n  - "))
+	}
+
+	return problems, nil
 }
 
 // WebSocketConfig holds real-time WebSocket settings.
@@ -43,6 +105,9 @@ type ServerConfig struct {
 	IdleTimeout       time.Duration
 	CORSAllowedOrigins []string
 	MaxBodyBytes      int64
+	// MetricsToken, when set, is the bearer token required to scrape /metrics.
+	// When empty, /metrics is reachable only from loopback and private ranges.
+	MetricsToken string
 }
 
 // DatabaseConfig holds PostgreSQL connection settings.
@@ -156,6 +221,7 @@ type LogConfig struct {
 func Load() *Config {
 	loadEnvFile()
 	return &Config{
+		Environment: envOrDefault("APP_ENV", "development"),
 		Server: ServerConfig{
 			Host:               envOrDefault("SERVER_HOST", "0.0.0.0"),
 			Port:               envOrDefaultInt("SERVER_PORT", 8080),
@@ -164,12 +230,13 @@ func Load() *Config {
 			IdleTimeout:        time.Duration(envOrDefaultInt("SERVER_IDLE_TIMEOUT_SECONDS", 60)) * time.Second,
 			CORSAllowedOrigins: envOrDefaultSlice("CORS_ALLOWED_ORIGINS", nil),
 			MaxBodyBytes:       envOrDefaultInt64("MAX_BODY_BYTES", 1<<20),
+			MetricsToken:       envOrDefault("METRICS_TOKEN", ""),
 		},
 		Database: DatabaseConfig{
 			Host:     envOrDefault("DB_HOST", "localhost"),
 			Port:     envOrDefaultInt("DB_PORT", 5432),
 			User:     envOrDefault("DB_USER", "yuvmi"),
-			Password: envOrDefault("DB_PASSWORD", "yuvmi"),
+			Password: envOrDefault("DB_PASSWORD", DefaultDBPassword),
 			DBName:   envOrDefault("DB_NAME", "yuvmi"),
 			SSLMode:  envOrDefault("DB_SSLMODE", "disable"),
 			MaxConns: envOrDefaultInt32("DB_MAX_CONNS", 25),
@@ -182,7 +249,7 @@ func Load() *Config {
 			DB:       envOrDefaultInt("REDIS_DB", 0),
 		},
 		JWT: JWTConfig{
-			Secret:                  envOrDefault("JWT_SECRET", "change-me-in-production"),
+			Secret:                  envOrDefault("JWT_SECRET", DefaultJWTSecret),
 			ExpirationHours:         envOrDefaultInt("JWT_EXPIRATION_HOURS", 24),
 			AccessExpirationMinutes: envOrDefaultInt("JWT_ACCESS_EXPIRATION_MINUTES", 60),
 			RefreshExpirationDays:   envOrDefaultInt("JWT_REFRESH_EXPIRATION_DAYS", 30),

@@ -23,6 +23,52 @@ type TokenPair = { token: string; refreshToken: string };
 
 let onSessionTokensRefreshed: ((tokens: TokenPair) => void) | null = null;
 
+/**
+ * Raised when the request never reached the server. Carries code 0 so callers
+ * can tell a connectivity failure apart from an API rejection. The base URL is
+ * only appended in development — it is an internal address and means nothing
+ * to a user.
+ */
+function networkError(): ApiError {
+  const message = "Bağlantı kurulamadı. İnternet bağlantını kontrol edip tekrar dene.";
+  return new ApiError(__DEV__ ? `${message} [${getApiBaseUrl()}]` : message, 0);
+}
+
+/** Hard deadline for every request. Without one, a stalled connection never
+ *  settles and the caller's loading state stays up forever. */
+const REQUEST_TIMEOUT_MS = 15_000;
+
+/** Uploads push real bytes over the wire, so this stays a separate knob even
+ *  though it currently matches REQUEST_TIMEOUT_MS. Raise it here if large
+ *  photos start timing out on slow connections. */
+const UPLOAD_TIMEOUT_MS = 15_000;
+
+/** Same code 0 as networkError: from the caller's side "the deadline passed"
+ *  and "the connection died" are the same situation — nothing reached the
+ *  server, so the request is safe to queue and replay. */
+function timeoutError(timeoutMs: number): ApiError {
+  return new ApiError(
+    `Sunucu ${Math.round(timeoutMs / 1000)} saniye içinde yanıt vermedi. Bağlantını kontrol edip tekrar dene.`,
+    0,
+  );
+}
+
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch {
+    throw controller.signal.aborted ? timeoutError(timeoutMs) : networkError();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export function setSessionTokenListener(listener: ((tokens: TokenPair) => void) | null) {
   onSessionTokensRefreshed = listener;
 }
@@ -89,10 +135,7 @@ async function requestWithRefresh<T>(
     headers,
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
   }).catch(() => {
-    throw new ApiError(
-      `API'ye ulaşılamadı (${getApiBaseUrl()}). Backend çalışıyor mu?`,
-      0,
-    );
+    throw networkError();
   });
 
   const text = await response.text();
@@ -155,10 +198,7 @@ export async function apiUpload<T>(
     },
     body: formData,
   }).catch(() => {
-    throw new ApiError(
-      `API'ye ulaşılamadı (${getApiBaseUrl()}). Backend çalışıyor mu?`,
-      0,
-    );
+    throw networkError();
   });
 
   if (response.status === 401 && !_retried) {

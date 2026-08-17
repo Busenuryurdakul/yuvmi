@@ -79,10 +79,17 @@ func run() error {
 	log.Info("starting masterfabric-go",
 		"host", cfg.Server.Host,
 		"port", cfg.Server.Port,
+		"environment", cfg.Environment,
 	)
 
-	if cfg.JWT.Secret == "change-me-in-production" {
-		log.Warn("JWT_SECRET is unset; authentication uses a known default value")
+	// Refuse to start in production with development defaults; elsewhere the
+	// same findings are surfaced as warnings.
+	warnings, err := cfg.Validate()
+	if err != nil {
+		return err
+	}
+	for _, w := range warnings {
+		log.Warn("insecure configuration", "detail", w)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -97,15 +104,15 @@ func run() error {
 		log.Info("opentelemetry initialized")
 	}
 
-	// Initialize PostgreSQL
+	// Initialize PostgreSQL. The database is not optional: without it the
+	// router silently drops every dependent route and the API answers 404
+	// instead of failing, so a connection failure has to stop the process.
 	db, err := database.NewPostgresPool(ctx, cfg.Database)
 	if err != nil {
-		log.Warn("postgres unavailable, running without database", "error", err)
-		db = nil
-	} else {
-		defer db.Close()
-		log.Info("connected to postgres")
+		return fmt.Errorf("connect to postgres: %w", err)
 	}
+	defer db.Close()
+	log.Info("connected to postgres")
 
 	// Initialize Redis
 	redisClient, err := cache.NewRedisClient(ctx, cfg.Redis)
@@ -225,12 +232,10 @@ func buildDependencies(
 		Redis:              redisClient,
 		CORSAllowedOrigins: cfg.Server.CORSAllowedOrigins,
 		MaxBodyBytes:       cfg.Server.MaxBodyBytes,
+		MetricsToken:       cfg.Server.MetricsToken,
 	}
 
-	if db == nil {
-		log.Warn("database not available, API endpoints will not work")
-		return deps, nil
-	}
+	// db is guaranteed non-nil: run() aborts when the pool cannot be created.
 
 	// --- Repositories ---
 	userRepo := pgIam.NewUserRepo(db)

@@ -39,13 +39,55 @@ function metroOrigin(): string | null {
   return `${tunneled ? "https" : "http"}://${host}`;
 }
 
-export function getApiBaseUrl(): string {
-  const explicit = process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
-  if (explicit && !isLoopback(explicit)) return explicit;
+function webOrigin(): string | null {
+  if (Platform.OS !== "web") return null;
+  if (typeof window === "undefined") return null;
+  return window.location?.origin ?? null;
+}
 
-  if (Platform.OS === "web" && typeof window !== "undefined" && window.location?.origin) {
-    return window.location.origin;
+/**
+ * Resolves the API base URL.
+ *
+ * Release builds must be told the API address at build time and it must be
+ * HTTPS — there is no localhost fallback, because silently pointing a shipped
+ * app at a loopback address turns a misconfigured build into a mystery instead
+ * of an error. Development keeps the Expo Go behaviour: the Metro origin over
+ * LAN, which is necessarily cleartext.
+ */
+export function getApiBaseUrl(): string {
+  const explicit = process.env.EXPO_PUBLIC_API_URL?.replace(/\/+$/, "") ?? "";
+
+  if (!__DEV__) {
+    if (explicit) {
+      if (!explicit.startsWith("https://")) {
+        throw new Error(
+          "EXPO_PUBLIC_API_URL must use https:// in release builds; cleartext API traffic is not allowed.",
+        );
+      }
+      return explicit;
+    }
+
+    // A same-origin web deployment is already served over the page's own
+    // scheme; accept it when that scheme is HTTPS.
+    const origin = webOrigin();
+    if (origin?.startsWith("https://")) return origin;
+
+    throw new Error(
+      "EXPO_PUBLIC_API_URL is not set. Release builds must be built with the API base URL configured.",
+    );
   }
 
-  return metroOrigin() ?? (explicit || "http://localhost:8080");
+  if (explicit && !isLoopback(explicit)) return explicit;
+
+  const origin = webOrigin();
+  if (origin) return origin;
+
+  const metro = metroOrigin();
+  if (metro) return metro;
+
+  if (explicit) return explicit;
+
+  throw new Error(
+    "API base URL could not be resolved. Connect to the Metro server over LAN or set EXPO_PUBLIC_API_URL.",
+  );
 }
