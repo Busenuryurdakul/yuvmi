@@ -15,6 +15,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	// Handlers
+	aiHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/ai"
 	apimgmtHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/apimanagement"
 	auditHandler "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/audit"
 	"github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/health"
@@ -131,6 +132,7 @@ type Dependencies struct {
 	AuditHandler    *auditHandler.Handler
 	RealtimeHandler *realtimeHandler.Handler
 	YuvmiHandler    *yuvmiHandler.Handler
+	AIHandler       *aiHandler.Handler
 
 	// Gateway
 	GatewayPipeline *gateway.Pipeline
@@ -289,6 +291,30 @@ func New(deps Dependencies) *chi.Mux {
 				})
 
 				r.Get("/export", deps.YuvmiHandler.ExportUserData)
+			}
+
+			if deps.AIHandler != nil {
+				// Consent is read and written even when AI generation is
+				// disabled — the settings screen must still work.
+				r.Route("/consents", func(r chi.Router) {
+					r.Get("/", deps.AIHandler.ListConsents)
+					r.Put("/{scope}", deps.AIHandler.UpdateConsent)
+				})
+
+				r.Route("/ai", func(r chi.Router) {
+					r.Get("/jobs/{id}", deps.AIHandler.GetJob)
+
+					// Generation costs real money per call. The per-user daily
+					// quota in the orchestrator is the budget control; this
+					// per-IP limit is the burst guard in front of it, so a
+					// client stuck in a retry loop cannot spend a day's quota
+					// in a few seconds.
+					r.Group(func(r chi.Router) {
+						r.Use(middleware.RateLimit(10, time.Minute))
+						r.Post("/goal-suggestions", deps.AIHandler.GoalSuggestions)
+						r.Post("/plan-suggestions", deps.AIHandler.PlanSuggestions)
+					})
+				})
 			}
 		})
 

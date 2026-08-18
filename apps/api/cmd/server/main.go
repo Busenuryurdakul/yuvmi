@@ -47,9 +47,13 @@ import (
 	"github.com/masterfabric-go/masterfabric/internal/shared/telemetry"
 	"github.com/masterfabric-go/masterfabric/internal/shared/version"
 
+	aiUC "github.com/masterfabric-go/masterfabric/internal/application/ai/usecase"
 	yuvmiUC "github.com/masterfabric-go/masterfabric/internal/application/yuvmi/usecase"
 	"github.com/masterfabric-go/masterfabric/internal/domain/alignment"
+	infraAnthropic "github.com/masterfabric-go/masterfabric/internal/infrastructure/ai/anthropic"
+	aiHandlerPkg "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/ai"
 	yuvmiHandlerPkg "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/yuvmi"
+	pgAI "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/ai"
 	pgFutureSelf "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/futureself"
 	pgGoal "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/goal"
 	pgProfile "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/profile"
@@ -422,6 +426,30 @@ func buildDependencies(
 		YuvmiCfg:      cfg.Yuvmi,
 	})
 	deps.YuvmiHandler = yuvmiHandlerPkg.NewHandler(yuvmiSvc)
+
+	// --- AI orchestration ---
+	// The provider is constructed unconditionally: with no API key it reports
+	// itself unavailable, the suggestion endpoints return 501, and clients use
+	// their static fallback lists. Consent endpoints stay live either way.
+	aiProvider := infraAnthropic.NewProvider(infraAnthropic.Config{
+		APIKey:  cfg.AI.APIKey,
+		Model:   cfg.AI.Model,
+		Effort:  cfg.AI.Effort,
+		Timeout: cfg.AI.Timeout,
+	})
+	if !aiProvider.Available() {
+		log.Warn("AI provider not configured, suggestion endpoints disabled",
+			"hint", "set ANTHROPIC_API_KEY to enable")
+	}
+	aiSvc := aiUC.NewService(aiUC.Deps{
+		Consents:   pgAI.NewConsentRepo(db),
+		Jobs:       pgAI.NewJobRepo(db),
+		Provider:   aiProvider,
+		FutureSelf: futureSelfRepo,
+		Goals:      goalRepo,
+		Cfg:        cfg.AI,
+	})
+	deps.AIHandler = aiHandlerPkg.NewHandler(aiSvc)
 
 	return deps, yuvmiSvc
 }

@@ -29,6 +29,7 @@ type Config struct {
 	JWT       JWTConfig
 	OAuth     OAuthConfig
 	Yuvmi     YuvmiConfig
+	AI        AIConfig
 	SMTP      SMTPConfig
 	Cron      CronConfig
 	Kafka     KafkaConfig
@@ -196,6 +197,31 @@ func (c StripeConfig) Enabled() bool {
 	return c.SecretKey != "" && c.PriceID != ""
 }
 
+// AIConfig holds AI orchestration settings. AI is opt-in: with no API key the
+// suggestion endpoints report themselves unavailable and clients fall back to
+// their static lists, so a deployment without AI credentials works unchanged.
+type AIConfig struct {
+	// Provider selects the vendor adapter. Only "anthropic" is implemented;
+	// the field exists so adding one is a config change, not a code change.
+	Provider string
+	APIKey   string
+	Model    string
+	// Effort tunes thinking depth against the PRD's 25s P95 latency budget.
+	Effort  string
+	Timeout time.Duration
+	// MaxTokens bounds one generation's output. Suggestion payloads are small;
+	// the headroom is for the model's thinking tokens, which share this cap.
+	MaxTokens int
+	// DailyQuota caps generations per user per scope per day. Zero disables
+	// the check.
+	DailyQuota int
+}
+
+// Enabled reports whether AI generation can actually run.
+func (c AIConfig) Enabled() bool {
+	return c.APIKey != ""
+}
+
 // SMTPConfig holds optional email delivery settings.
 type SMTPConfig struct {
 	Host     string
@@ -274,6 +300,15 @@ func Load() *Config {
 				SuccessURL:    envOrDefault("STRIPE_SUCCESS_URL", envOrDefault("YUVMI_APP_BASE_URL", "http://localhost:8081")+"/premium?checkout=success"),
 				CancelURL:     envOrDefault("STRIPE_CANCEL_URL", envOrDefault("YUVMI_APP_BASE_URL", "http://localhost:8081")+"/premium?checkout=cancel"),
 			},
+		},
+		AI: AIConfig{
+			Provider:   envOrDefault("AI_PROVIDER", "anthropic"),
+			APIKey:     envOrDefault("ANTHROPIC_API_KEY", ""),
+			Model:      envOrDefault("AI_MODEL", "claude-opus-5"),
+			Effort:     envOrDefault("AI_EFFORT", "low"),
+			Timeout:    time.Duration(envOrDefaultInt("AI_TIMEOUT_SECONDS", 30)) * time.Second,
+			MaxTokens:  envOrDefaultInt("AI_MAX_TOKENS", 4096),
+			DailyQuota: envOrDefaultInt("AI_DAILY_QUOTA", 20),
 		},
 		SMTP: SMTPConfig{
 			Host:     envOrDefault("SMTP_HOST", ""),
