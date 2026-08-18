@@ -31,7 +31,7 @@ export default function FocusDiveScreen() {
   const [phase, setPhase] = useState<"idle" | "diving" | "done">("idle");
   const [finds, setFinds] = useState<string[]>([]);
   const [lastFind, setLastFind] = useState("");
-  const diverPos = useRef(new Animated.Value(6)).current;
+  const [diverPos] = useState(() => new Animated.Value(6));
   const ref = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -205,7 +205,7 @@ export default function FocusDiveScreen() {
         <Glass style={styles.card}>
           <Eyebrow>Sayaç bitti · işaretleyelim mi?</Eyebrow>
           <Text style={styles.markText}>
-            "{NIYETS[niyet]}" için {duration} dakika kesintisiz çalıştın.
+            &quot;{NIYETS[niyet]}&quot; için {duration} dakika kesintisiz çalıştın.
           </Text>
           <View style={styles.markRow}>
             <Pressable style={styles.markBtn}>

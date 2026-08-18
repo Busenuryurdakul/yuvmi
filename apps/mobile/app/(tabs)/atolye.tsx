@@ -14,7 +14,7 @@ import { theme } from "@/theme";
 export default function AtolyeScreen() {
   const { user } = useAuth();
   const { prefs, patchPrefs } = useMode();
-  const tohum = prefs?.tohum ?? 48; // İnci balance — synced from backend, spent locally
+  const tohum = prefs?.tohum ?? 48; // Local cache of the balance; the server owns the ledger
   const [balanceSheetOpen, setBalanceSheetOpen] = useState(false);
 
   useFocusEffect(
@@ -23,7 +23,7 @@ export default function AtolyeScreen() {
       fetchPearlBalance()
         .then((res) => void patchPrefs({ tohum: res.balance }))
         .catch(() => {});
-    }, [user?.token]),
+    }, [user?.token, patchPrefs]),
   );
 
   return (
@@ -39,20 +39,35 @@ export default function AtolyeScreen() {
         subtitle="Kişisel gelişim sistemlerini ve niyet araçlarını tasarladığın alan."
       />
 
+      {/* animationType="none": react-native-web only unmounts the modal when the
+          CSS fade-out fires `animationend`. When that event never arrives (reduced
+          motion, a backgrounded tab, any suppressed animation) the sheet stays on
+          screen with pointer-events:none — visible but dead, and every tap falls
+          through to the tab bar underneath. Mounting is state-driven instead. */}
       <Modal
         visible={balanceSheetOpen}
         transparent
-        animationType="fade"
+        animationType="none"
         onRequestClose={() => setBalanceSheetOpen(false)}
       >
-        <Pressable style={styles.sheetBackdrop} onPress={() => setBalanceSheetOpen(false)}>
-          <Pressable style={styles.sheetCard} onPress={(e) => e.stopPropagation()}>
+        {/* The backdrop is a sibling of the card, not its parent. Nesting the
+            card inside a Pressable made card and options compete for the same
+            press, so an option's tap could be swallowed by the wrapper. */}
+        <View style={styles.sheetBackdrop}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Kapat"
+            style={StyleSheet.absoluteFill}
+            onPress={() => setBalanceSheetOpen(false)}
+          />
+          <View style={styles.sheetCard}>
             <Text style={styles.sheetTitle}>İnci Göstergesi 🫧</Text>
             <Text style={styles.sheetBody}>
-              Kıyıya vuranlar dükkanına mı yoksa Mercan Bahçesi'ne mi gitmek istersin?
+              Kıyıya vuranlar dükkanına mı yoksa Mercan Bahçesi&apos;ne mi gitmek istersin?
             </Text>
             <Pressable
-              style={styles.sheetOption}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.sheetOption, pressed && styles.sheetPressed]}
               onPress={() => {
                 setBalanceSheetOpen(false);
                 router.push("/atolye/shop");
@@ -61,7 +76,8 @@ export default function AtolyeScreen() {
               <Text style={styles.sheetOptionText}>Kıyıya Vuranlar (Dükkân)</Text>
             </Pressable>
             <Pressable
-              style={styles.sheetOption}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.sheetOption, pressed && styles.sheetPressed]}
               onPress={() => {
                 setBalanceSheetOpen(false);
                 router.push("/atolye/garden");
@@ -69,18 +85,22 @@ export default function AtolyeScreen() {
             >
               <Text style={styles.sheetOptionText}>Mercan Bahçesi</Text>
             </Pressable>
-            <Pressable style={styles.sheetCancel} onPress={() => setBalanceSheetOpen(false)}>
+            <Pressable
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.sheetCancel, pressed && styles.sheetPressed]}
+              onPress={() => setBalanceSheetOpen(false)}
+            >
               <Text style={styles.sheetCancelText}>İptal</Text>
             </Pressable>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
 
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         {/* 1. OLUŞTUR */}
         <Glass style={styles.card}>
           <Eyebrow style={styles.lbl}>🛠️ 1. OLUŞTUR</Eyebrow>
-          <Text style={styles.cardTitle}>"Kendi sistemlerini tasarla"</Text>
+          <Text style={styles.cardTitle}>&quot;Kendi sistemlerini tasarla&quot;</Text>
           <View style={styles.rows}>
             <TapRow
               title="🔔 Bildirim tasarla"
@@ -96,7 +116,7 @@ export default function AtolyeScreen() {
         {/* 2. YAZ */}
         <Glass style={styles.card}>
           <Eyebrow style={styles.lbl}>✍️ 2. YAZ</Eyebrow>
-          <Text style={styles.cardTitle}>"Düşüncelerini dışa vur"</Text>
+          <Text style={styles.cardTitle}>&quot;Düşüncelerini dışa vur&quot;</Text>
           <View style={styles.rows}>
             <TapRow title="✉️ Mektup kutusu" subtitle="Yaz, mühürle, gelecekteki bir tarihte aç" nested onPress={() => router.push("/vision/letter")} />
             <TapRow title="🍾 Şişeye koy ve bırak" subtitle="Yaz ve denize bırak, akıntıyla uzaklaşsın" nested onPress={() => router.push("/atolye/release")} />
@@ -106,7 +126,7 @@ export default function AtolyeScreen() {
         {/* 3. ODAK */}
         <Glass style={styles.card}>
           <Eyebrow style={styles.lbl}>🧘 3. ODAK</Eyebrow>
-          <Text style={styles.cardTitle}>"Şimdiye dön"</Text>
+          <Text style={styles.cardTitle}>&quot;Şimdiye dön&quot;</Text>
           <View style={styles.rows}>
             <TapRow title="🤿 Gerçek Dalış" subtitle="Metreler indikçe derinleşen odak sayacı" nested onPress={() => router.push("/atolye/focus")} />
             <TapRow title="🌬️ Nefes molası" subtitle="Kutucuklu nefes egzersizi (4-4-4)" nested onPress={() => router.push("/atolye/breath")} />
@@ -117,7 +137,7 @@ export default function AtolyeScreen() {
         {/* 4. ORTAK ALAN */}
         <Glass style={styles.card}>
           <Eyebrow style={styles.lbl}>👥 4. ORTAK ALAN</Eyebrow>
-          <Text style={styles.cardTitle}>"Yakınlarınla paylaş"</Text>
+          <Text style={styles.cardTitle}>&quot;Yakınlarınla paylaş&quot;</Text>
           
           <Glass style={[styles.innerCard, { padding: 14 }]}>
             <Eyebrow style={{ fontSize: 10.5, marginBottom: 8 }}>ORTAK ALAN</Eyebrow>
@@ -229,6 +249,9 @@ const styles = StyleSheet.create({
   sheetCancel: {
     paddingVertical: 14,
     marginTop: 4,
+  },
+  sheetPressed: {
+    opacity: 0.6,
   },
   sheetCancelText: {
     fontFamily: theme.font.sans,

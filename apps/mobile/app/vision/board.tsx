@@ -90,7 +90,7 @@ export default function VisionBoardScreen() {
           <View style={styles.empty} pointerEvents="none">
             <Text style={styles.emptyText}>
               Panon boş.{"\n"}Aşağıdan fotoğraf, not veya sticker ekle —{"\n"}ya da bir görsel kopyalayıp buraya yapıştır.
-              {"\n\n"}Her öğeye "bu neden burada?" notu ekleyebilirsin.
+              {"\n\n"}Her öğeye &quot;bu neden burada?&quot; notu ekleyebilirsin.
             </Text>
           </View>
         ) : null}
@@ -253,13 +253,14 @@ function BoardPiece({
   moveRef.current = onMove;
   itemRef.current = item;
 
-  // Track position using Animated.ValueXY for smooth 60fps local translation without parent re-render lag
-  const panXY = useRef(new Animated.ValueXY({ x: item.x, y: item.y })).current;
+  // Track position using Animated.ValueXY for smooth 60fps local translation without parent re-render lag.
+  // Lazy useState: tek sefer kurulur, kimligi sabit kalir ve render sirasinda ref okumaz.
+  const [panXY] = useState(() => new Animated.ValueXY({ x: item.x, y: item.y }));
 
   // Sync animation value if prop values change from outside
   useEffect(() => {
     panXY.setValue({ x: item.x, y: item.y });
-  }, [item.x, item.y]);
+  }, [item.x, item.y, panXY]);
 
   const pan = useMemo(
     () =>
@@ -283,7 +284,7 @@ function BoardPiece({
           moveRef.current(finalX, finalY);
         },
       }),
-    [onSelect],
+    [onSelect, panXY],
   );
 
   return (

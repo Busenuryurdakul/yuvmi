@@ -87,7 +87,7 @@ export default function YuvmiScreen() {
       <Glass style={styles.voiceCard}>
         <Text style={styles.voiceKicker}>KONUŞARAK KAPAT</Text>
         <Text style={styles.voiceDescription}>
-          Tam sürümde günü sesle anlatabilecek, Yuvmi'nin ne işaretlediğini onaylayacaksın.
+          Tam sürümde günü sesle anlatabilecek, Yuvmi&apos;nin ne işaretlediğini onaylayacaksın.
         </Text>
         <View style={styles.previewBadge}>
           <Text style={styles.previewBadgeText}>

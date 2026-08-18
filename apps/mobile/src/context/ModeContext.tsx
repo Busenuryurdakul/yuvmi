@@ -39,6 +39,10 @@ export function ModeProvider({ children }: { children: ReactNode }) {
           survivalMode: false,
         } satisfies AppPrefs);
       const merged = { ...base, ...next };
+      // `tohum` is a local cache of the İnci balance. It is never pushed back
+      // to the server: the backend owns the ledger (users.pearl_balance) and
+      // hands out pearls through the award endpoints, which enforce the daily
+      // caps. Writing the local value up would let a client mint its own.
       void savePrefs(merged);
       return merged;
     });

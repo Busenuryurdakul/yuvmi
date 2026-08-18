@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View, ScrollView, Animated } from "react-native";
 import { router } from "expo-router";
 import { Screen } from "@/components/ui/Screen";
 import { SubpageBar } from "@/components/ui/SubpageBar";
 import { Eyebrow, Glass } from "@/components/ui/Glass";
 import { useMode } from "@/context/ModeContext";
+import { spendPearls } from "@/lib/api/yuvmi";
 import { alert } from "@/lib/alert";
 import { theme } from "@/theme";
 
@@ -115,8 +116,8 @@ export default function LetterScreen() {
 
   // Sealing animation states
   const [isSealing, setIsSealing] = useState(false);
-  const sealAnim = useRef(new Animated.Value(0)).current; // 0 to 1
-  const bottleWobble = useRef(new Animated.Value(1)).current; // bottle scale
+  const [sealAnim] = useState(() => new Animated.Value(0)); // 0 to 1
+  const [bottleWobble] = useState(() => new Animated.Value(1)); // bottle scale
 
   function handleOpenLetter(letter: Letter) {
     if (letter.status === "locked") {
@@ -132,7 +133,19 @@ export default function LetterScreen() {
                 alert("Yetersiz İnci 🫧", "Erken açmak için 5 İnci gerekir.");
                 return;
               }
-              await patchPrefs({ tohum: tohum - 5 });
+              // Server-side spend — a local deduction gets overwritten by the
+              // next balance refetch, so the mektup would open "for free".
+              try {
+                const res = await spendPearls("mektup:erken-ac", 5);
+                await patchPrefs({ tohum: res.balance });
+                if (!res.spent) {
+                  alert("Yetersiz İnci 🫧", "Erken açmak için 5 İnci gerekir.");
+                  return;
+                }
+              } catch {
+                alert("Açılamadı", "Bağlantı kurulamadı. Biraz sonra tekrar dene.");
+                return;
+              }
               const updated = letters.map((l) => (l.id === letter.id ? { ...l, status: "opened" as const } : l));
               setLetters(updated);
               setSelectedLetter({ ...letter, status: "opened" });
@@ -636,7 +649,7 @@ export default function LetterScreen() {
             <Glass style={styles.comparisonCard}>
               <Eyebrow style={styles.lbl}>O GÜNDEN BUGÜNE</Eyebrow>
               <Text style={styles.comparisonBody}>
-                Bu mektubu yazdığın gün ruh hâlin "{selectedLetter.mood}" idi. O günden bugüne: 42 gün geçti, 2 kez yoldan çıkıp 2 kez planına geri döndün.
+                Bu mektubu yazdığın gün ruh hâlin &quot;{selectedLetter.mood}&quot; idi. O günden bugüne: 42 gün geçti, 2 kez yoldan çıkıp 2 kez planına geri döndün.
               </Text>
             </Glass>
 

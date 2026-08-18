@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Animated, Easing, StyleSheet, Text, TextInput } from "react-native";
 import { SubpageScreen } from "@/components/ui/SubpageScreen";
 import { Glass } from "@/components/ui/Glass";
@@ -8,9 +8,9 @@ import { theme } from "@/theme";
 export default function ReleaseScreen() {
   const [text, setText] = useState("");
   const [phase, setPhase] = useState<"write" | "burning" | "done">("write");
-  const opacity = useRef(new Animated.Value(1)).current;
-  const translateY = useRef(new Animated.Value(0)).current;
-  const scale = useRef(new Animated.Value(1)).current;
+  const [opacity] = useState(() => new Animated.Value(1));
+  const [translateY] = useState(() => new Animated.Value(0));
+  const [scale] = useState(() => new Animated.Value(1));
 
   function burn() {
     if (!text.trim()) return;

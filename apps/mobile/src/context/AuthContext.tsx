@@ -125,7 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    (async () => {
+    void (async () => {
       const session = await loadStoredSession();
       if (!mounted) return;
       if (!session?.token) {

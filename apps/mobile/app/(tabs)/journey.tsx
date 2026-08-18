@@ -65,7 +65,7 @@ export default function JourneyScreen() {
   useFocusEffect(
     useCallback(() => {
       if (!user?.token) return;
-      Promise.allSettled([
+      void Promise.allSettled([
         fetchActiveGoal(),
         fetchActivePlan(),
         fetchPlans(),

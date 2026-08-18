@@ -7,11 +7,12 @@ import { AuthProvider } from "@/context/AuthContext";
 import { ModeProvider } from "@/context/ModeContext";
 import { OnboardingProvider } from "@/context/OnboardingContext";
 import { AppEffects } from "@/components/AppEffects";
+import { AlertHost } from "@/components/ui/AlertHost";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useAppFonts } from "@/lib/fonts";
 import { theme } from "@/theme";
 
-SplashScreen.preventAutoHideAsync();
+void SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const [loaded, error] = useAppFonts();
@@ -89,8 +90,11 @@ export default function RootLayout() {
               <Stack.Screen name="atolye/garden" options={{ animation: "slide_from_right" }} />
               <Stack.Screen name="atolye/cards" options={{ animation: "slide_from_right" }} />
               <Stack.Screen name="atolye/shop" options={{ animation: "slide_from_right" }} />
+              <Stack.Screen name="legal/privacy" options={{ animation: "slide_from_right" }} />
+              <Stack.Screen name="legal/support" options={{ animation: "slide_from_right" }} />
               <Stack.Screen name="notifications" options={{ presentation: "modal" }} />
             </Stack>
+            <AlertHost />
           </ModeProvider>
         </OnboardingProvider>
       </AuthProvider>

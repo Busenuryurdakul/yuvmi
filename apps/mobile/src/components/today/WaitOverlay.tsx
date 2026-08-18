@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Animated, Easing, Modal, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { theme } from "@/theme";
@@ -16,8 +16,8 @@ function format(seconds: number) {
 
 export function WaitOverlay({ seconds, onComplete }: WaitOverlayProps) {
   const visible = seconds != null;
-  const scale = useRef(new Animated.Value(0.08)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
+  const [scale] = useState(() => new Animated.Value(0.08));
+  const [opacity] = useState(() => new Animated.Value(0));
   const shrinking = useRef(false);
 
   useEffect(() => {

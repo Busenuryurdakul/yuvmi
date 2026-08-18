@@ -45,7 +45,7 @@ export default function ArchiveScreen() {
   }, [user?.token]);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   const pickImage = async () => {

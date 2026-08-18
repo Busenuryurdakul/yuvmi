@@ -17,4 +17,15 @@ module.exports = defineConfig([
       "@typescript-eslint/no-floating-promises": "error",
     },
   },
+  {
+    // Bu dosyanin kendisi CommonJS olarak Node'da calisiyor.
+    files: ["eslint.config.js"],
+    languageOptions: {
+      globals: {
+        __dirname: "readonly",
+        module: "writable",
+        require: "readonly",
+      },
+    },
+  },
 ]);

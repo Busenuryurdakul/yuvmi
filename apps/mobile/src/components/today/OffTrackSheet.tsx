@@ -20,7 +20,10 @@ export function OffTrackSheet({ visible, onClose, onPick }: OffTrackSheetProps) 
   const insets = useSafeAreaInsets();
 
   return (
-    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+    /* animationType="none" — see the note in app/(tabs)/atolye.tsx: a "fade"
+       modal on react-native-web can get stuck mounted-but-inert when the
+       fade-out never fires `animationend`. */
+    <Modal transparent visible={visible} animationType="none" onRequestClose={onClose}>
       <Pressable style={styles.scrim} onPress={onClose}>
         <View />
       </Pressable>

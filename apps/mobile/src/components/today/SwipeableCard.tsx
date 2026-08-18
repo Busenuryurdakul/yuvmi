@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useState } from "react";
 import {
   Animated,
   PanResponder,
@@ -20,10 +20,12 @@ type SwipeableCardProps = {
 
 export function SwipeableCard({ children, onSwipe, label }: SwipeableCardProps) {
   const { width } = useWindowDimensions();
-  const pan = useRef(new Animated.ValueXY()).current;
+  const [pan] = useState(() => new Animated.ValueXY());
 
   function resetCard() {
-    Animated.spring(pan.x, { toValue: 0, useNativeDriver: true }).start();
+    // pan.x is driven from JS by PanResponder, so every animation on it has to
+    // stay on the JS driver — mixing drivers on one Animated.Value throws.
+    Animated.spring(pan.x, { toValue: 0, useNativeDriver: false }).start();
   }
 
   function requestDelete() {
@@ -33,13 +35,13 @@ export function SwipeableCard({ children, onSwipe, label }: SwipeableCardProps) 
     ]);
   }
 
-  const panResponder = useRef(
+  const [panResponder] = useState(() =>
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_, gestureState) => {
         return Math.abs(gestureState.dx) > 10 && Math.abs(gestureState.dy) < 15;
       },
-      onPanResponderMove: Animated.event([null, { dx: pan.x }], { useNativeDriver: true }),
+      onPanResponderMove: Animated.event([null, { dx: pan.x }], { useNativeDriver: false }),
       onPanResponderRelease: (_, gestureState) => {
         const threshold = width * 0.35;
         // Swiping past the threshold no longer deletes outright — the card
@@ -54,8 +56,12 @@ export function SwipeableCard({ children, onSwipe, label }: SwipeableCardProps) 
         }
       },
       onPanResponderTerminationRequest: () => false,
+      // A forced termination (pointercancel, the app backgrounding, a parent
+      // scroll seizing the gesture) skips onPanResponderRelease entirely, so
+      // without this the card would stay stuck at its dragged offset.
+      onPanResponderTerminate: resetCard,
     })
-  ).current;
+  );
 
   const opacity = pan.x.interpolate({
     inputRange: [-width * 0.5, 0, width * 0.5],

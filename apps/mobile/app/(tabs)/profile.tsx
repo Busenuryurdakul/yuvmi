@@ -8,11 +8,45 @@ import { Eyebrow, Glass } from "@/components/ui/Glass";
 import { useAuth } from "@/context/AuthContext";
 import { useMode } from "@/context/ModeContext";
 import { useSubscription } from "@/hooks/useSubscription";
-import { exportUserData, fetchActiveGoal, fetchActivePlan, fetchMe, fetchMyAssets, fetchPlans } from "@/lib/api/yuvmi";
+import { Switch } from "@/components/ui/Switch";
+import {
+  exportUserData,
+  fetchActiveGoal,
+  fetchActivePlan,
+  fetchConsents,
+  fetchMe,
+  fetchMyAssets,
+  fetchPlans,
+  updateConsent,
+} from "@/lib/api/yuvmi";
 import type { GoalResponse, PlanResponse } from "@/lib/api/types";
 import type { UserMode } from "@/lib/local";
 import { alert } from "@/lib/alert";
+import { hostedPrivacyUrl, hostedSupportUrl, openExternal } from "@/lib/links";
 import { theme } from "@/theme";
+
+/**
+ * Both rows prefer a hosted page when one is configured and fall back to the
+ * in-app screen otherwise, so the link resolves in every build — including the
+ * one App Review installs before any page is published.
+ */
+function openPrivacy() {
+  const hosted = hostedPrivacyUrl();
+  if (hosted) {
+    void openExternal(hosted);
+    return;
+  }
+  router.push("/legal/privacy");
+}
+
+function openSupport() {
+  const hosted = hostedSupportUrl();
+  if (hosted) {
+    void openExternal(hosted);
+    return;
+  }
+  router.push("/legal/support");
+}
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -67,18 +101,25 @@ export default function ProfileScreen() {
   const [returns, setReturns] = useState(0);
   const [days, setDays] = useState(1);
   const [assetCount, setAssetCount] = useState(0);
+  const [trainingConsent, setTrainingConsent] = useState(false);
+  const [consentBusy, setConsentBusy] = useState(false);
 
   useEffect(() => {
     if (!user?.token) return;
     let mounted = true;
-    Promise.allSettled([
+    void Promise.allSettled([
       fetchActiveGoal(),
       fetchActivePlan(),
       fetchPlans(),
       fetchMe(),
       fetchMyAssets(),
-    ]).then(([g, p, pl, me, assets]) => {
+      fetchConsents(),
+    ]).then(([g, p, pl, me, assets, consents]) => {
       if (!mounted) return;
+      setTrainingConsent(
+        consents.status === "fulfilled" &&
+          consents.value.some((c) => c.scope === "ai_training_data" && c.granted),
+      );
       setGoal(g.status === "fulfilled" ? g.value : null);
       setPlan(p.status === "fulfilled" ? p.value : null);
       setReturns(pl.status === "fulfilled" ? pl.value.filter((x) => x.status === "superseded").length : 0);
@@ -116,6 +157,25 @@ export default function ProfileScreen() {
       alert("Dışa aktarma hazır", data.filename);
     } catch (e) {
       alert("Hata", e instanceof Error ? e.message : "Dışa aktarılamadı.");
+    }
+  }
+
+  /**
+   * Optimistic so the switch answers the tap immediately, and reverted on
+   * failure so it never shows a permission the server did not record — the one
+   * place in the app where a stale toggle would misstate what is allowed.
+   */
+  async function toggleTraining(next: boolean) {
+    if (consentBusy) return;
+    setConsentBusy(true);
+    setTrainingConsent(next);
+    try {
+      await updateConsent("ai_training_data", next);
+    } catch {
+      setTrainingConsent(!next);
+      alert("Kaydedilemedi", "İzin tercihin güncellenemedi. Bağlantını kontrol edip tekrar dene.");
+    } finally {
+      setConsentBusy(false);
     }
   }
 
@@ -184,7 +244,7 @@ export default function ProfileScreen() {
       </Glass>
 
       <Glass style={styles.stat}>
-        <Eyebrow style={styles.lbl}>Benim Yuvmi'm</Eyebrow>
+        <Eyebrow style={styles.lbl}>Benim Yuvmi&apos;m</Eyebrow>
         <Kv label="Hedef" value={goal?.title ?? "—"} />
         <Kv label="Yuvmi'deki günün" value={`${days}. gün`} />
         {!hard ? <Kv label="Geri dönüş" value={`${returns} kez`} /> : null}
@@ -198,6 +258,27 @@ export default function ProfileScreen() {
         <Kv label="Sessiz hafta" last right={<ComingSoonBadge />} />
         <Text style={styles.hint}>
           Yakında: hatırlatma saatlerini ve sessiz hafta ayarını buradan yönetebileceksin.
+        </Text>
+      </Glass>
+
+      <Glass style={styles.stat}>
+        <Eyebrow style={styles.lbl}>Yapay zekâ</Eyebrow>
+        <Kv
+          label="Önerileri geliştirmeye katkıda bulun"
+          last
+          right={
+            <Switch
+              value={trainingConsent}
+              disabled={consentBusy}
+              onChange={(next) => void toggleTraining(next)}
+            />
+          }
+        />
+        <Text style={styles.hint}>
+          Açarsan yapay zekânın sana sunduğu öneriler ve senin bu önerilere verdiğin karar
+          (kabul, düzenleme, ret) saklanır ve Yuvmi&apos;yi geliştirmek için kullanılır.
+          Kapattığında şimdiye kadar toplananlar da silinir. Öneri üretimi bu ayardan
+          bağımsız çalışır.
         </Text>
       </Glass>
 
@@ -219,23 +300,10 @@ export default function ProfileScreen() {
         />
       </Glass>
 
-      {/*
-        TODO(yayın öncesi): Gizlilik politikası ve destek/geri bildirim için
-        gerçek, yayınlanmış URL'ler gerekiyor (App Store / Play Store inceleme
-        şartı). URL'ler netleşince Linking.openURL ile bağla, alert'leri kaldır.
-      */}
       <Glass style={styles.stat}>
         <Eyebrow style={styles.lbl}>Destek</Eyebrow>
-        <Kv
-          label="Yardım ve geri bildirim"
-          value="›"
-          onPress={() => alert("Yardım ve geri bildirim", "Bu bölüm henüz hazırlanıyor.")}
-        />
-        <Kv
-          label="Gizlilik politikası"
-          value="›"
-          onPress={() => alert("Gizlilik politikası", "Gizlilik politikası metni henüz yayınlanmadı.")}
-        />
+        <Kv label="Yardım ve geri bildirim" value="›" onPress={openSupport} />
+        <Kv label="Gizlilik politikası" value="›" onPress={openPrivacy} />
         <Kv label="Sürüm" value={`${version} · v8`} last />
       </Glass>
 

@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SubpageScreen } from "@/components/ui/SubpageScreen";
 import { Eyebrow } from "@/components/ui/Glass";
 import { useMode } from "@/context/ModeContext";
+import { spendPearls } from "@/lib/api/yuvmi";
 import { alert } from "@/lib/alert";
 import { theme } from "@/theme";
 
@@ -48,15 +49,35 @@ export default function ShopScreen() {
   const tohum = prefs?.tohum ?? 48; // Treated as İnci balance
   const [tab, setTab] = useState("garden");
   const [owned, setOwned] = useState<Set<string>>(new Set());
+  const [buying, setBuying] = useState<string | null>(null);
 
   async function buy(item: ShopItem) {
     const key = `${tab}:${item.name}`;
-    if (owned.has(key)) return;
+    if (owned.has(key) || buying) return;
     if (tohum < item.cost) {
       alert("Biraz daha İnci lazım 🫧", `${item.cost - tohum} İnci eksik. Aceleye gerek yok.`);
       return;
     }
-    await patchPrefs({ tohum: tohum - item.cost });
+
+    // The spend has to go through the server: the balance lives in the backend
+    // ledger, and the Atölye screen refetches it on focus. A purely local
+    // deduction looked like it worked and then silently reappeared on the way
+    // back — the balance snapped straight back to where it started.
+    setBuying(key);
+    try {
+      const res = await spendPearls(item.name, item.cost);
+      await patchPrefs({ tohum: res.balance });
+      if (!res.spent) {
+        alert("Biraz daha İnci lazım 🫧", `${item.name} için yeterli İnci yok. Aceleye gerek yok.`);
+        return;
+      }
+    } catch {
+      alert("Satın alınamadı", "Bağlantı kurulamadı. Biraz sonra tekrar dene.");
+      return;
+    } finally {
+      setBuying(null);
+    }
+
     setOwned((prev) => new Set(prev).add(key));
 
     const messages: Record<string, string> = {
@@ -89,16 +110,19 @@ export default function ShopScreen() {
         {items.map((item) => {
           const key = `${tab}:${item.name}`;
           const has = owned.has(key);
+          const pending = buying === key;
           return (
             <Pressable
               key={key}
-              style={[styles.sitem, has && styles.sitemOwned]}
+              style={[styles.sitem, (has || pending) && styles.sitemOwned]}
               onPress={() => void buy(item)}
-              disabled={has}
+              disabled={has || buying !== null}
             >
               <Text style={styles.ic}>{item.emoji}</Text>
               <Text style={styles.sitemTitle}>{item.name}</Text>
-              <Text style={styles.sitemCost}>{has ? "alındı ✓" : `🫧 ${item.cost}`}</Text>
+              <Text style={styles.sitemCost}>
+                {has ? "alındı ✓" : pending ? "alınıyor…" : `🫧 ${item.cost}`}
+              </Text>
             </Pressable>
           );
         })}

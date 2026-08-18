@@ -3,20 +3,18 @@ import { Animated, Easing, StyleSheet, Text, TextInput, View } from "react-nativ
 import { SubpageScreen } from "@/components/ui/SubpageScreen";
 import { Glass, Eyebrow } from "@/components/ui/Glass";
 import { Button } from "@/components/ui/Button";
-import { useMode } from "@/context/ModeContext";
 import { theme } from "@/theme";
 
 const CANDLE_SECS = 45;
 
 export default function CandleScreen() {
-  const { prefs, patchPrefs } = useMode();
   const [intent, setIntent] = useState("");
   const [phase, setPhase] = useState<"idle" | "lit" | "done">("idle");
   const [left, setLeft] = useState(CANDLE_SECS);
   const [shelf, setShelf] = useState<string[]>(["Sabırlı olacağım"]);
   const [currentIntent, setCurrentIntent] = useState("");
-  const flicker = useRef(new Animated.Value(1)).current;
-  const glow = useRef(new Animated.Value(0)).current;
+  const [flicker] = useState(() => new Animated.Value(1));
+  const [glow] = useState(() => new Animated.Value(0));
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -75,7 +73,9 @@ export default function CandleScreen() {
           stopFlicker();
           setPhase("done");
           setShelf((s) => [...s, text]);
-          void patchPrefs({ tohum: (prefs?.tohum ?? 48) + 1 });
+          // No pearl bump here: `tohum` is only a local cache of the server's
+          // ledger, so incrementing it showed a pearl that vanished on the
+          // next balance sync. Pearls come from the award endpoints.
           return 0;
         }
         return prev - 1;
@@ -138,7 +138,9 @@ export default function CandleScreen() {
               placeholderTextColor={theme.color.ink40}
             />
           </Glass>
-          <Button label="Mumu yak" onPress={light} />
+          {/* Disabled rather than a silent no-op: `light()` returns early on an
+              empty niyet, so the button used to look simply broken. */}
+          <Button label="Mumu yak" onPress={light} disabled={!intent.trim()} />
         </>
       ) : null}
 
