@@ -106,13 +106,13 @@ type WebSocketConfig struct {
 
 // ServerConfig holds HTTP server settings.
 type ServerConfig struct {
-	Host              string
-	Port              int
-	ReadTimeout       time.Duration
-	WriteTimeout      time.Duration
-	IdleTimeout       time.Duration
+	Host               string
+	Port               int
+	ReadTimeout        time.Duration
+	WriteTimeout       time.Duration
+	IdleTimeout        time.Duration
 	CORSAllowedOrigins []string
-	MaxBodyBytes      int64
+	MaxBodyBytes       int64
 	// MetricsToken, when set, is the bearer token required to scrape /metrics.
 	// When empty, /metrics is reachable only from loopback and private ranges.
 	MetricsToken string
@@ -161,11 +161,11 @@ func (r RedisConfig) Addr() string {
 
 // JWTConfig holds JWT signing settings.
 type JWTConfig struct {
-	Secret                 string
-	ExpirationHours        int
+	Secret                  string
+	ExpirationHours         int
 	AccessExpirationMinutes int
-	RefreshExpirationDays  int
-	Issuer                 string
+	RefreshExpirationDays   int
+	Issuer                  string
 }
 
 // OAuthConfig holds OAuth provider verification settings.
@@ -186,11 +186,11 @@ type YuvmiConfig struct {
 
 // StripeConfig holds Stripe Checkout + webhook settings.
 type StripeConfig struct {
-	SecretKey      string
-	WebhookSecret  string
-	PriceID        string
-	SuccessURL     string
-	CancelURL      string
+	SecretKey     string
+	WebhookSecret string
+	PriceID       string
+	SuccessURL    string
+	CancelURL     string
 }
 
 func (c StripeConfig) Enabled() bool {
@@ -201,11 +201,15 @@ func (c StripeConfig) Enabled() bool {
 // suggestion endpoints report themselves unavailable and clients fall back to
 // their static lists, so a deployment without AI credentials works unchanged.
 type AIConfig struct {
-	// Provider selects the vendor adapter. Only "anthropic" is implemented;
-	// the field exists so adding one is a config change, not a code change.
+	// Provider selects the vendor adapter: "anthropic" or "gemini". An
+	// unrecognised name refuses startup rather than falling back to a default.
 	Provider string
-	APIKey   string
-	Model    string
+	// APIKey is resolved from AI_API_KEY, or the selected vendor's own
+	// variable (ANTHROPIC_API_KEY / GEMINI_API_KEY). See aiAPIKey.
+	APIKey string
+	// Model is empty unless AI_MODEL is set, leaving the choice of default to
+	// the selected adapter.
+	Model string
 	// Effort tunes thinking depth against the PRD's 25s P95 latency budget.
 	Effort  string
 	Timeout time.Duration
@@ -233,8 +237,8 @@ type SMTPConfig struct {
 
 // CronConfig holds background job settings.
 type CronConfig struct {
-	Enabled          bool
-	PushIntervalMin  int
+	Enabled           bool
+	PushIntervalMin   int
 	DailyReminderHour int
 	WeeklyReminderDay int // 0=Sunday
 }
@@ -302,9 +306,12 @@ func Load() *Config {
 			},
 		},
 		AI: AIConfig{
-			Provider:   envOrDefault("AI_PROVIDER", "anthropic"),
-			APIKey:     envOrDefault("ANTHROPIC_API_KEY", ""),
-			Model:      envOrDefault("AI_MODEL", "claude-opus-5"),
+			Provider: envOrDefault("AI_PROVIDER", "anthropic"),
+			APIKey:   aiAPIKey(envOrDefault("AI_PROVIDER", "anthropic")),
+			// Empty by default so each adapter applies its own DefaultModel.
+			// A hardcoded default here could only ever name one vendor's model
+			// and would break the moment AI_PROVIDER pointed at another.
+			Model:      envOrDefault("AI_MODEL", ""),
 			Effort:     envOrDefault("AI_EFFORT", "low"),
 			Timeout:    time.Duration(envOrDefaultInt("AI_TIMEOUT_SECONDS", 30)) * time.Second,
 			MaxTokens:  envOrDefaultInt("AI_MAX_TOKENS", 4096),
@@ -423,6 +430,26 @@ func loadEnvFile() {
 	}
 }
 
+// aiAPIKey resolves the credential for the selected provider.
+//
+// AI_API_KEY is the provider-neutral override. Falling back to the vendor's own
+// conventional variable means a Gemini deployment sets GEMINI_API_KEY rather
+// than stuffing a Google credential into ANTHROPIC_API_KEY, which would read as
+// a mistake to anyone auditing the environment later.
+func aiAPIKey(provider string) string {
+	if key := envOrDefault("AI_API_KEY", ""); key != "" {
+		return key
+	}
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "gemini":
+		return envOrDefault("GEMINI_API_KEY", "")
+	case "openai":
+		return envOrDefault("OPENAI_API_KEY", "")
+	default:
+		return envOrDefault("ANTHROPIC_API_KEY", "")
+	}
+}
+
 func loadDatabaseConfig() DatabaseConfig {
 	rawURL := envOrDefault("DATABASE_URL", "")
 	if rawURL != "" {
@@ -468,4 +495,3 @@ func loadDatabaseConfig() DatabaseConfig {
 		MinConns: envOrDefaultInt32("DB_MIN_CONNS", 5),
 	}
 }
-

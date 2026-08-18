@@ -18,6 +18,14 @@ const (
 	ScopeWeeklyReview      ConsentScope = "ai_weekly_review"
 	ScopeSharedSpace       ConsentScope = "ai_shared_space"
 	ScopeDataExport        ConsentScope = "data_export"
+
+	// ScopeTrainingData permits keeping a suggestion and the user's reaction to
+	// it so the model can be improved later. It is separate from the scopes
+	// above because it is a different purpose, not a different feature: those
+	// permit sending data to produce an answer the user asked for, this one
+	// permits retaining that exchange after the answer has been delivered.
+	// Granting plan generation must not silently enrol someone in a corpus.
+	ScopeTrainingData ConsentScope = "ai_training_data"
 )
 
 // AllScopes is the canonical scope list. GET /consents returns a row for every
@@ -30,6 +38,7 @@ func AllScopes() []ConsentScope {
 		ScopeWeeklyReview,
 		ScopeSharedSpace,
 		ScopeDataExport,
+		ScopeTrainingData,
 	}
 }
 

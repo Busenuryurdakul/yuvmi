@@ -1,4 +1,4 @@
-import type { GoalStatus, LifeDomain, PlanStatus } from "@yuvmi/shared";
+import type { ConsentScope, GoalStatus, LifeDomain, PlanStatus } from "@yuvmi/shared";
 
 export type ApiErrorBody = {
   error?: { message: string; code: number };
@@ -269,4 +269,54 @@ export type DataExportResponse = {
   mimeType: string;
   encoding?: "base64" | "json";
   data: string;
+};
+
+/** One AI permission the user can grant or revoke on its own. Scopes the user
+ *  has never been asked about come back as `granted: false`, so the settings
+ *  screen can render every toggle from this list alone. */
+export type ConsentResponse = {
+  scope: ConsentScope;
+  granted: boolean;
+  grantedAt?: string;
+  revokedAt?: string;
+};
+
+/** `jobId` refers to the audit row for this generation. It carries accounting
+ *  only — status, tokens, latency — never the prompt or its content. */
+export type GoalSuggestionsResponse = {
+  suggestions: string[];
+  jobId: string;
+};
+
+export type PlanStepSuggestion = {
+  dayOffset: number;
+  title: string;
+  description: string;
+};
+
+export type PlanTemplateSuggestion = {
+  title: string;
+  description: string;
+  steps: PlanStepSuggestion[];
+};
+
+export type PlanSuggestionsResponse = {
+  templates: PlanTemplateSuggestion[];
+  jobId: string;
+};
+
+/** What the user did with a suggestion. Reported without knowing whether the
+ *  ai_training_data scope is granted — the server decides whether there is
+ *  anything to label, so the client never has to check first. */
+export type AIDecision = "accepted" | "edited" | "rejected";
+
+export type AIJobResponse = {
+  id: string;
+  scope: ConsentScope;
+  status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  errorCode?: string;
+  tokensUsed?: number;
+  latencyMs?: number;
+  createdAt: string;
+  completedAt?: string;
 };

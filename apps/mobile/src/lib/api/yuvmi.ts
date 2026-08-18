@@ -1,8 +1,13 @@
 import { apiRequest, apiUpload } from "./client";
 import { getApiBaseUrl } from "./config";
 import type {
+  AIDecision,
+  AIJobResponse,
   AlignmentResponse,
   AssetResponse,
+  ConsentResponse,
+  GoalSuggestionsResponse,
+  PlanSuggestionsResponse,
   CheckinResponse,  DailyTaskResponse,
   FutureSelfResponse,
   GoalResponse,
@@ -19,7 +24,7 @@ import type {
   UserProfileResponse,
   WeeklyReviewResponse,
 } from "./types";
-import type { LifeDomain } from "@yuvmi/shared";
+import type { ConsentScope, LifeDomain } from "@yuvmi/shared";
 
 export async function registerUser(input: {
   email: string;
@@ -444,4 +449,70 @@ export async function cancelSubscription() {
 
 export async function exportUserData() {
   return apiRequest<import("./types").DataExportResponse>("/api/v1/export");
+}
+
+/* --- AI (consent + öneriler) --- */
+
+/** Returns every known scope, including ones the user has never decided on
+ *  (as `granted: false`), so the caller never has to know the scope list. */
+export async function fetchConsents() {
+  return apiRequest<ConsentResponse[]>("/api/v1/consents");
+}
+
+export async function updateConsent(scope: ConsentScope, granted: boolean) {
+  return apiRequest<ConsentResponse>(`/api/v1/consents/${scope}`, {
+    method: "PUT",
+    body: { granted },
+  });
+}
+
+/**
+ * Asks the server for goal ideas built from the user's own Future Self profile.
+ *
+ * No request body: the server reads the profile it already stores, so the
+ * client never assembles or transmits the personal context itself.
+ *
+ * Throws rather than returning a fallback. The caller decides what to show —
+ * for onboarding that is the local static list — because the fallback copy
+ * lives in the app and must not be duplicated server-side.
+ */
+export async function fetchGoalSuggestions() {
+  return apiRequest<GoalSuggestionsResponse>("/api/v1/ai/goal-suggestions", {
+    method: "POST",
+    body: {},
+  });
+}
+
+/** Same contract as fetchGoalSuggestions, built from Future Self + the active
+ *  goal. Requires the ai_plan_generation scope. */
+export async function fetchPlanSuggestions() {
+  return apiRequest<PlanSuggestionsResponse>("/api/v1/ai/plan-suggestions", {
+    method: "POST",
+    body: {},
+  });
+}
+
+export async function fetchAIJob(jobId: string) {
+  return apiRequest<AIJobResponse>(`/api/v1/ai/jobs/${jobId}`);
+}
+
+/**
+ * Reports what the user did with a suggestion, which is the label half of the
+ * training pair — the model's output alone teaches nothing about whether
+ * producing it was right.
+ *
+ * Fire-and-forget by design: callers should not await this on a user-visible
+ * path or surface its failure. Losing one label is invisible; making someone
+ * wait on a bookkeeping call to accept their own plan is not. `finalOutput`
+ * only means something with "edited" and is ignored otherwise.
+ */
+export async function reportAIDecision(
+  jobId: string,
+  decision: AIDecision,
+  finalOutput?: unknown,
+) {
+  return apiRequest<void>(`/api/v1/ai/jobs/${jobId}/decision`, {
+    method: "POST",
+    body: decision === "edited" && finalOutput !== undefined ? { decision, finalOutput } : { decision },
+  });
 }

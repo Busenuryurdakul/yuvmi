@@ -17,16 +17,26 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { useOnboarding } from "@/context/OnboardingContext";
 import { promptPremiumUpsell } from "@/hooks/usePremiumUpsell";
-import { createGoal, fetchCurrentGoal, fetchFutureSelf, updateGoal } from "@/lib/api/yuvmi";
+import {
+  createGoal,
+  fetchCurrentGoal,
+  fetchFutureSelf,
+  fetchGoalSuggestions,
+  updateGoal,
+} from "@/lib/api/yuvmi";
+import { AISuggestionHeader } from "@/components/ai/AISuggestionHeader";
+import { useAISuggestions } from "@/hooks/useAISuggestions";
+import { classifyTextDecision, reportDecision } from "@/lib/aiDecision";
 import { ApiError } from "@/lib/api/client";
 import type { FutureSelfResponse, GoalResponse } from "@/lib/api/types";
 import { theme } from "@/theme";
 
 /**
- * TODO(AI): Hedef chip'leri kurulum adım 1–2 verisine göre AI ile üretilecek.
+ * Hedef chip'leri: consent varsa AI, yoksa aşağıdaki statik liste.
  * @see docs/PRD-AI.md — "Onboarding adım 3 — AI hedef chip'leri"
- * Girdi: FutureSelf (title, description, domains, affirmation)
- * Fallback: buildSuggestions() — consent yok / API hata
+ *
+ * GOAL_IDEAS bilinçli olarak burada duruyor — sunucuda ikinci bir kopyası yok,
+ * böylece fallback metinleri tek yerden değişir.
  */
 
 const GOAL_IDEAS: Partial<Record<LifeDomain, string[]>> = {
@@ -70,11 +80,30 @@ export default function OnboardingGoalScreen() {
   const [deadlineSkipped, setDeadlineSkipped] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Which AI suggestion the user tapped, if any. Kept so the decision report
+  // can tell "started from a suggestion and reworded it" apart from "ignored
+  // them and wrote their own" — see classifyTextDecision.
+  const [pickedSuggestion, setPickedSuggestion] = useState<string | null>(null);
 
-  const suggestions = useMemo(
+  const staticSuggestions = useMemo(
     () => buildSuggestions(futureSelf?.domains ?? []),
     [futureSelf?.domains],
   );
+
+  const {
+    state: aiState,
+    data: aiData,
+    grantAndGenerate,
+  } = useAISuggestions({
+    scope: "ai_profile_generation",
+    fetcher: fetchGoalSuggestions,
+    // Held back until the profile exists: it is the entire input to the
+    // generation, and asking without it would spend a call on nothing.
+    enabled: Boolean(user?.token) && Boolean(futureSelf),
+  });
+
+  const suggestions =
+    aiState === "ready" && aiData?.suggestions.length ? aiData.suggestions : staticSuggestions;
 
   const loadFutureSelf = useCallback(async () => {
     if (!user?.token) {
@@ -167,6 +196,15 @@ export default function OnboardingGoalScreen() {
       }
       setExistingGoal(goal);
       setGoalId(goal.id);
+      // Reported only after the save succeeds: the decision worth learning
+      // from is the one the user committed to, not one they abandoned at a
+      // validation error. finalOutput mirrors the model's own schema so the
+      // corpus keeps a single shape per scope.
+      if (aiState === "ready" && aiData?.jobId) {
+        reportDecision(aiData.jobId, classifyTextDecision(pickedSuggestion, goal.title), {
+          suggestions: [goal.title],
+        });
+      }
       router.replace("/(onboarding)/plan");
     } catch (err) {
       if (!promptPremiumUpsell(err, { feature: "Ek hedef oluşturma" })) {
@@ -207,7 +245,13 @@ export default function OnboardingGoalScreen() {
 
       {suggestions.length > 0 ? (
         <>
-          <Text style={styles.hint}>Seçtiğin alanlara göre fikirler</Text>
+          <AISuggestionHeader
+            state={aiState}
+            fallbackLabel="Seçtiğin alanlara göre fikirler"
+            aiLabel="Senin için öneriler"
+            consentPitch="Gelecekteki Ben profiline bakarak sana özel hedef önerileri hazırlayabiliriz."
+            onGrant={() => void grantAndGenerate()}
+          />
           <View style={styles.chipRow}>
             {suggestions.map((idea) => (
               <Pressable
@@ -215,6 +259,7 @@ export default function OnboardingGoalScreen() {
                 onPress={() => {
                   setError(null);
                   setTitle(idea);
+                  if (aiState === "ready") setPickedSuggestion(idea);
                 }}
                 style={[styles.chip, title === idea && styles.chipActive]}
               >

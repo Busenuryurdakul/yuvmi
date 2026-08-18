@@ -305,6 +305,12 @@ func New(deps Dependencies) *chi.Mux {
 				r.Route("/ai", func(r chi.Router) {
 					r.Get("/jobs/{id}", deps.AIHandler.GetJob)
 
+					// Outside the rate-limited group below: reporting a
+					// decision costs a row, not a provider call, and throttling
+					// it would silently drop training labels from exactly the
+					// users who interact most.
+					r.Post("/jobs/{id}/decision", deps.AIHandler.RecordDecision)
+
 					// Generation costs real money per call. The per-user daily
 					// quota in the orchestrator is the budget control; this
 					// per-IP limit is the burst guard in front of it, so a

@@ -87,6 +87,37 @@ func (h *Handler) GetJob(w http.ResponseWriter, r *http.Request) {
 	respond(w, data, err)
 }
 
+// RecordDecision reports what the user did with a suggestion, feeding the
+// training corpus behind the ai_training_data scope.
+//
+// It answers 204 whether or not a sample was labelled. Whether one exists
+// depends on a consent the client does not track, and returning 404 for the
+// ordinary "training not enabled" case would make every client handle an error
+// it cannot act on.
+func (h *Handler) RecordDecision(w http.ResponseWriter, r *http.Request) {
+	userID, ok := requireUserID(w, r)
+	if !ok {
+		return
+	}
+	jobID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.YuvmiFail(w, domainErr.New(domainErr.ErrValidation, "invalid job id", err))
+		return
+	}
+	var req dto.RecordDecisionRequest
+	if err := decodeAndValidate(r, &req); err != nil {
+		response.YuvmiFail(w, err)
+		return
+	}
+	if err := h.svc.RecordDecision(
+		r.Context(), userID, jobID, aimodel.Decision(req.Decision), req.FinalOutput,
+	); err != nil {
+		response.YuvmiFail(w, err)
+		return
+	}
+	response.YuvmiNoContent(w)
+}
+
 // decodeAndValidate replaces validator.DecodeAndValidate, which returns bare
 // errors that HTTPStatusCode cannot classify and so reports as 500 — masking
 // the field-level detail the client needs to fix its request. Decoding and

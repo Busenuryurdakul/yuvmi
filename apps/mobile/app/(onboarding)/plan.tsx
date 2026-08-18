@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { getRecommendedPlanTemplates, type PlanTemplate } from "@yuvmi/shared";
+import { isAITemplate, toPlanTemplates } from "@/lib/planSuggestions";
 import { Screen } from "@/components/ui/Screen";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Stepper } from "@/components/ui/Stepper";
@@ -12,14 +13,21 @@ import { LoadingScreen } from "@/components/ui/LoadingScreen";
 import { PlanTemplatePicker } from "@/components/plan/PlanTemplatePicker";
 import { useAuth } from "@/context/AuthContext";
 import { useOnboarding } from "@/context/OnboardingContext";
-import { activatePlan, createPlan, fetchCurrentGoal, fetchFutureSelf } from "@/lib/api/yuvmi";
+import {
+  activatePlan,
+  createPlan,
+  fetchCurrentGoal,
+  fetchFutureSelf,
+  fetchPlanSuggestions,
+} from "@/lib/api/yuvmi";
+import { AISuggestionHeader } from "@/components/ai/AISuggestionHeader";
+import { useAISuggestions } from "@/hooks/useAISuggestions";
+import { reportDecision } from "@/lib/aiDecision";
 import { theme } from "@/theme";
 
 /**
- * TODO(AI): Plan kartları kurulum adım 1–3 verisine göre AI ile üretilecek.
+ * Plan kartları: consent varsa AI, yoksa getRecommendedPlanTemplates(domains).
  * @see docs/PRD-AI.md — "Onboarding adım 4 — AI plan önerileri"
- * Girdi: FutureSelf + Goal (title, description, targetDate, domains)
- * Fallback: getRecommendedPlanTemplates(domains)
  */
 
 export default function OnboardingPlanScreen() {
@@ -27,14 +35,44 @@ export default function OnboardingPlanScreen() {
   const { goalId, setGoalId, setPlanId } = useOnboarding();
   const [goalTitle, setGoalTitle] = useState<string | null>(null);
   const [templates, setTemplates] = useState<PlanTemplate[]>([]);
-  const [selected, setSelected] = useState<PlanTemplate | null>(null);
+  // The id rather than the template itself, so the selection survives the list
+  // being swapped from static to AI (see `selected` below).
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const {
+    state: aiState,
+    data: aiData,
+    grantAndGenerate,
+  } = useAISuggestions({
+    scope: "ai_plan_generation",
+    fetcher: fetchPlanSuggestions,
+    // Both the profile and the goal feed this generation, and the goal is what
+    // the plan is actually built around — so wait for goalId, not just the token.
+    enabled: Boolean(user?.token) && Boolean(goalId),
+  });
+
+  const aiTemplates = useMemo(
+    () => (aiData?.templates.length ? toPlanTemplates(aiData.templates) : null),
+    [aiData],
+  );
+
+  const visibleTemplates = aiState === "ready" && aiTemplates ? aiTemplates : templates;
+
   const hasRecommendations = useMemo(
     () => templates.some((t) => t.domain !== "generic"),
     [templates],
+  );
+
+  // Derived, not stored: the list can be swapped underneath the user when AI
+  // templates arrive seconds after the static ones. Resolving the id during
+  // render means a selection that is no longer on offer falls back to the
+  // first card on its own, with no effect syncing two pieces of state.
+  const selected = useMemo(
+    () => visibleTemplates.find((t) => t.id === selectedId) ?? visibleTemplates[0] ?? null,
+    [visibleTemplates, selectedId],
   );
 
   const loadContext = useCallback(async () => {
@@ -52,16 +90,13 @@ export default function OnboardingPlanScreen() {
       const fs = fsResult.status === "fulfilled" ? fsResult.value : null;
       setGoalTitle(goal?.title ?? null);
       if (goal?.id) setGoalId(goal.id);
-      const recommended = getRecommendedPlanTemplates(fs?.domains ?? []);
-      setTemplates(recommended);
-      setSelected((prev) => {
-        if (prev && recommended.some((t) => t.id === prev.id)) return prev;
-        return recommended[0] ?? null;
-      });
+      // Selection is owned by the effect above — setting it here too would
+      // fight it on every refocus, snapping an AI choice back to the static list.
+      setTemplates(getRecommendedPlanTemplates(fs?.domains ?? []));
     } finally {
       setInitializing(false);
     }
-  }, [user?.token]);
+  }, [user?.token, setGoalId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -92,6 +127,12 @@ export default function OnboardingPlanScreen() {
       });
       setPlanId(plan.id);
       await activatePlan(plan.id);
+      // The picker offers whole templates and no way to edit one, so the only
+      // two outcomes are "took an AI card" and "took a static card instead" —
+      // there is no edited case to report here.
+      if (aiState === "ready" && aiData?.jobId && aiTemplates) {
+        reportDecision(aiData.jobId, isAITemplate(selected.id) ? "accepted" : "rejected");
+      }
       markOnboardingComplete();
       await refreshProfile();
       router.replace("/(onboarding)/complete");
@@ -126,11 +167,20 @@ export default function OnboardingPlanScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
+        <AISuggestionHeader
+          state={aiState}
+          fallbackLabel=""
+          aiLabel="Hedefine göre hazırlandı"
+          consentPitch="Hedefine ve Gelecekteki Ben profiline göre sana özel plan önerileri hazırlayabiliriz."
+          onGrant={() => void grantAndGenerate()}
+        />
         <PlanTemplatePicker
-          templates={templates}
+          templates={visibleTemplates}
           selectedId={selected?.id}
-          onSelect={setSelected}
-          recommended={hasRecommendations}
+          onSelect={(t) => setSelectedId(t.id)}
+          // The picker's own "recommended" label only makes sense for the
+          // static list; AI cards carry the AI badge above instead.
+          recommended={aiState === "ready" && aiTemplates ? false : hasRecommendations}
         />
       </ScrollView>
 

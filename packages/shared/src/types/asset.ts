@@ -26,7 +26,11 @@ export type ConsentScope =
   | "ai_daily_task"
   | "ai_weekly_review"
   | "ai_shared_space"
-  | "data_export";
+  | "data_export"
+  /** Retaining a suggestion and the user's reaction to it for model
+   *  improvement — a separate purpose from the generation scopes above, so it
+   *  is asked for separately and revoking it deletes what was collected. */
+  | "ai_training_data";
 
 /** Explicit permission for AI or data processing on specific resources */
 export interface Consent {

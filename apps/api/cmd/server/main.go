@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -50,7 +51,10 @@ import (
 	aiUC "github.com/masterfabric-go/masterfabric/internal/application/ai/usecase"
 	yuvmiUC "github.com/masterfabric-go/masterfabric/internal/application/yuvmi/usecase"
 	"github.com/masterfabric-go/masterfabric/internal/domain/alignment"
+	aiService "github.com/masterfabric-go/masterfabric/internal/domain/ai/service"
 	infraAnthropic "github.com/masterfabric-go/masterfabric/internal/infrastructure/ai/anthropic"
+	infraGemini "github.com/masterfabric-go/masterfabric/internal/infrastructure/ai/gemini"
+	infraOpenAI "github.com/masterfabric-go/masterfabric/internal/infrastructure/ai/openai"
 	aiHandlerPkg "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/ai"
 	yuvmiHandlerPkg "github.com/masterfabric-go/masterfabric/internal/infrastructure/http/handler/yuvmi"
 	pgAI "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/ai"
@@ -133,7 +137,10 @@ func run() error {
 	defer func() { _ = eventBus.Close() }()
 
 	// Build dependencies
-	deps, yuvmiSvc := buildDependencies(log, cfg, db, redisClient, eventBus)
+	deps, yuvmiSvc, err := buildDependencies(log, cfg, db, redisClient, eventBus)
+	if err != nil {
+		return err
+	}
 
 	// Start push notification cron
 	if yuvmiSvc != nil && db != nil {
@@ -229,7 +236,7 @@ func buildDependencies(
 	db *pgxpool.Pool,
 	redisClient *redis.Client,
 	eventBus events.EventBus,
-) (router.Dependencies, *yuvmiUC.Service) {
+) (router.Dependencies, *yuvmiUC.Service, error) {
 	deps := router.Dependencies{
 		Logger:             log,
 		DB:                 db,
@@ -428,22 +435,14 @@ func buildDependencies(
 	deps.YuvmiHandler = yuvmiHandlerPkg.NewHandler(yuvmiSvc)
 
 	// --- AI orchestration ---
-	// The provider is constructed unconditionally: with no API key it reports
-	// itself unavailable, the suggestion endpoints return 501, and clients use
-	// their static fallback lists. Consent endpoints stay live either way.
-	aiProvider := infraAnthropic.NewProvider(infraAnthropic.Config{
-		APIKey:  cfg.AI.APIKey,
-		Model:   cfg.AI.Model,
-		Effort:  cfg.AI.Effort,
-		Timeout: cfg.AI.Timeout,
-	})
-	if !aiProvider.Available() {
-		log.Warn("AI provider not configured, suggestion endpoints disabled",
-			"hint", "set ANTHROPIC_API_KEY to enable")
+	aiProvider, err := newAIProvider(cfg.AI, log)
+	if err != nil {
+		return router.Dependencies{}, nil, err
 	}
 	aiSvc := aiUC.NewService(aiUC.Deps{
 		Consents:   pgAI.NewConsentRepo(db),
 		Jobs:       pgAI.NewJobRepo(db),
+		Training:   pgAI.NewTrainingSampleRepo(db),
 		Provider:   aiProvider,
 		FutureSelf: futureSelfRepo,
 		Goals:      goalRepo,
@@ -451,5 +450,68 @@ func buildDependencies(
 	})
 	deps.AIHandler = aiHandlerPkg.NewHandler(aiSvc)
 
-	return deps, yuvmiSvc
+	return deps, yuvmiSvc, nil
+}
+
+// newAIProvider selects the vendor adapter named by AI_PROVIDER.
+//
+// An unrecognised name is a startup error rather than a fallback to the
+// default. Silently serving Anthropic to someone who configured "gemini" would
+// bill the wrong account, and silently disabling AI would look identical to a
+// missing key — both hide a typo that is trivial to fix once it is named.
+//
+// A recognised provider with no API key is not an error: it reports itself
+// unavailable, the suggestion endpoints return 501, and clients fall back to
+// their static lists. Consent endpoints stay live either way.
+func newAIProvider(cfg config.AIConfig, log *slog.Logger) (aiService.Provider, error) {
+	var (
+		provider aiService.Provider
+		keyEnv   string
+	)
+
+	switch strings.ToLower(strings.TrimSpace(cfg.Provider)) {
+	case "", "anthropic":
+		provider = infraAnthropic.NewProvider(infraAnthropic.Config{
+			APIKey:  cfg.APIKey,
+			Model:   cfg.Model,
+			Effort:  cfg.Effort,
+			Timeout: cfg.Timeout,
+		})
+		keyEnv = "ANTHROPIC_API_KEY"
+
+	case "gemini":
+		gp := infraGemini.NewProvider(infraGemini.Config{
+			APIKey:  cfg.APIKey,
+			Model:   cfg.Model,
+			Timeout: cfg.Timeout,
+		})
+		// A key that was supplied but rejected by the SDK is a real
+		// misconfiguration, and it would otherwise be indistinguishable from
+		// having set no key at all.
+		if initErr := gp.InitError(); initErr != nil {
+			return nil, fmt.Errorf("gemini provider init: %w", initErr)
+		}
+		provider = gp
+		keyEnv = "GEMINI_API_KEY"
+
+	case "openai":
+		provider = infraOpenAI.NewProvider(infraOpenAI.Config{
+			APIKey:  cfg.APIKey,
+			Model:   cfg.Model,
+			Timeout: cfg.Timeout,
+		})
+		keyEnv = "OPENAI_API_KEY"
+
+	default:
+		return nil, fmt.Errorf(
+			"unknown AI_PROVIDER %q: expected \"anthropic\", \"gemini\" or \"openai\"", cfg.Provider)
+	}
+
+	if !provider.Available() {
+		log.Warn("AI provider not configured, suggestion endpoints disabled",
+			"provider", provider.Name(), "hint", "set "+keyEnv+" to enable")
+	} else {
+		log.Info("AI provider ready", "provider", provider.Name(), "model", cfg.Model)
+	}
+	return provider, nil
 }

@@ -28,6 +28,7 @@ import (
 type Service struct {
 	consents   airepo.ConsentRepository
 	jobs       airepo.JobRepository
+	training   airepo.TrainingSampleRepository
 	provider   aiService.Provider
 	futureSelf fsRepo.FutureSelfRepository
 	goals      goalRepo.GoalRepository
@@ -35,8 +36,12 @@ type Service struct {
 }
 
 type Deps struct {
-	Consents   airepo.ConsentRepository
-	Jobs       airepo.JobRepository
+	Consents airepo.ConsentRepository
+	Jobs     airepo.JobRepository
+	// Training may be nil. Every call site treats a nil repository as "this
+	// deployment does not collect training data", which keeps the corpus an
+	// opt-in of the operator as well as of the user.
+	Training   airepo.TrainingSampleRepository
 	Provider   aiService.Provider
 	FutureSelf fsRepo.FutureSelfRepository
 	Goals      goalRepo.GoalRepository
@@ -47,6 +52,7 @@ func NewService(deps Deps) *Service {
 	return &Service{
 		consents:   deps.Consents,
 		jobs:       deps.Jobs,
+		training:   deps.Training,
 		provider:   deps.Provider,
 		futureSelf: deps.FutureSelf,
 		goals:      deps.Goals,
@@ -100,6 +106,20 @@ func (s *Service) SetConsent(ctx context.Context, userID uuid.UUID, scope aimode
 			// work, so a stale job row must not fail the revocation.
 			slog.ErrorContext(ctx, "cancel pending ai jobs after consent revoke failed",
 				"user_id", userID, "scope", scope, "error", err)
+		}
+
+		// Withdrawing the training permission has to mean the corpus forgets,
+		// not merely that it stops growing: the rows already collected are the
+		// raw prompts, kept for no purpose the user still permits. This is the
+		// one revocation that deletes rather than gates, so unlike the cancel
+		// above its failure is returned — reporting success while the samples
+		// survive would be a false answer to a privacy request.
+		if scope == aimodel.ScopeTrainingData && s.training != nil {
+			if err := s.training.DeleteByUser(ctx, userID); err != nil {
+				slog.ErrorContext(ctx, "delete ai training samples after consent revoke failed",
+					"user_id", userID, "error", err)
+				return nil, err
+			}
 		}
 	}
 	return &dto.ConsentResponse{
@@ -211,16 +231,21 @@ func (s *Service) GetJob(ctx context.Context, userID, jobID uuid.UUID) (*dto.AIJ
 // profile data, so a request that will be refused never reads — let alone
 // assembles into a prompt — the data it was refused access to.
 func (s *Service) guard(ctx context.Context, userID uuid.UUID, scope aimodel.ConsentScope) error {
-	if s.provider == nil || !s.provider.Available() {
-		return domainErr.New(domainErr.ErrNotImplemented, "ai suggestions are not enabled", nil)
-	}
-
+	// Consent is checked before provider availability, and the order matters
+	// twice over. It is what PRD-AI 13 specifies ("Consent yok → 403"), and it
+	// keeps the answer about the user's own permission independent of server
+	// configuration — a caller who has not consented learns nothing about
+	// whether AI is wired up on this deployment.
 	granted, err := s.hasConsent(ctx, userID, scope)
 	if err != nil {
 		return err
 	}
 	if !granted {
 		return domainErr.New(domainErr.ErrForbidden, "ai consent not granted for this scope", nil)
+	}
+
+	if s.provider == nil || !s.provider.Available() {
+		return domainErr.New(domainErr.ErrNotImplemented, "ai suggestions are not enabled", nil)
 	}
 
 	return s.checkQuota(ctx, userID, scope)
@@ -282,7 +307,100 @@ func (s *Service) generate(
 	if err := s.jobs.Complete(ctx, job.ID, result.TokensUsed, latency, s.provider.Name()); err != nil {
 		slog.ErrorContext(ctx, "record ai job completion failed", "job_id", job.ID, "error", err)
 	}
+
+	s.recordTrainingSample(ctx, job, userContext, result)
 	return job.ID, nil
+}
+
+// recordTrainingSample keeps one generation for later model improvement, if and
+// only if the user granted ScopeTrainingData.
+//
+// The sample is written now, while the output is still in hand, rather than
+// when the user decides. Waiting would lose every generation from someone who
+// closes the app without answering — which is not a rare edge case but a
+// signal in its own right, and the population most worth learning from.
+//
+// Everything here is best-effort: the user has already been served, and
+// failing their request over a corpus write would trade the thing they asked
+// for against a thing they will never see.
+func (s *Service) recordTrainingSample(
+	ctx context.Context,
+	job *aimodel.Job,
+	userContext string,
+	result *aiService.GenerationResult,
+) {
+	if s.training == nil {
+		return
+	}
+
+	granted, err := s.hasConsent(ctx, job.UserID, aimodel.ScopeTrainingData)
+	if err != nil {
+		slog.ErrorContext(ctx, "training consent lookup failed",
+			"job_id", job.ID, "error", err)
+		return
+	}
+	if !granted {
+		return
+	}
+
+	provider := s.provider.Name()
+	sample := &aimodel.TrainingSample{
+		JobID:         job.ID,
+		UserID:        job.UserID,
+		Scope:         job.Scope,
+		Provider:      &provider,
+		PromptContext: userContext,
+		Output:        result.Content,
+		Decision:      aimodel.DecisionPending,
+	}
+	if result.Model != "" {
+		model := result.Model
+		sample.Model = &model
+	}
+
+	if err := s.training.Create(ctx, sample); err != nil {
+		slog.ErrorContext(ctx, "record ai training sample failed",
+			"job_id", job.ID, "error", err)
+	}
+}
+
+// RecordDecision stores what the user did with a suggestion — the label half of
+// a training pair, and the only part of the corpus that carries a judgement.
+//
+// A job with no sample is the ordinary case rather than an error: it means the
+// user never granted the training scope. Clients report decisions without
+// knowing whether that scope is on, so a missing sample succeeds silently
+// instead of making every caller handle a 404 it cannot act on.
+func (s *Service) RecordDecision(
+	ctx context.Context,
+	userID, jobID uuid.UUID,
+	decision aimodel.Decision,
+	finalOutput json.RawMessage,
+) error {
+	if !aimodel.ValidDecision(decision) {
+		return domainErr.New(domainErr.ErrValidation, "unknown decision", nil)
+	}
+	if s.training == nil {
+		return nil
+	}
+
+	// finalOutput only means something against an "edited" decision. Storing
+	// one sent alongside "accepted" or "rejected" would put a value in the
+	// column that the export reads as "this is what the user changed it to",
+	// which is the opposite of what happened.
+	if decision != aimodel.DecisionEdited || len(finalOutput) == 0 {
+		finalOutput = nil
+	}
+
+	// The repository matches on user_id as well as job_id, so an unrelated job
+	// id cannot be labelled or probed for existence.
+	if err := s.training.RecordDecision(ctx, userID, jobID, decision, finalOutput); err != nil {
+		if errors.Is(err, domainErr.ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 // checkQuota enforces the per-user, per-scope daily cap. A quota of zero or

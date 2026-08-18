@@ -94,6 +94,64 @@ func (f *fakeJobs) CancelPending(_ context.Context, _ uuid.UUID, scope aimodel.C
 	return nil
 }
 
+// fakeTraining records the corpus writes so a test can assert both that a
+// sample was kept and — more importantly — that one was not.
+type fakeTraining struct {
+	samples []aimodel.TrainingSample
+	deleted []uuid.UUID
+	// createErr simulates a corpus write failing, which must never surface to
+	// the user whose generation already succeeded.
+	createErr error
+	// deleteErr simulates the delete-on-revoke failing, which must surface.
+	deleteErr error
+}
+
+func (f *fakeTraining) Create(_ context.Context, sample *aimodel.TrainingSample) error {
+	if f.createErr != nil {
+		return f.createErr
+	}
+	if sample.ID == uuid.Nil {
+		sample.ID = uuid.New()
+	}
+	f.samples = append(f.samples, *sample)
+	return nil
+}
+
+func (f *fakeTraining) RecordDecision(
+	_ context.Context,
+	userID, jobID uuid.UUID,
+	decision aimodel.Decision,
+	finalOutput []byte,
+) error {
+	for i := range f.samples {
+		s := &f.samples[i]
+		if s.JobID != jobID || s.UserID != userID || s.Decision != aimodel.DecisionPending {
+			continue
+		}
+		s.Decision = decision
+		s.FinalOutput = finalOutput
+		now := time.Now().UTC()
+		s.DecidedAt = &now
+		return nil
+	}
+	return domainErr.New(domainErr.ErrNotFound, "no pending training sample for this job", nil)
+}
+
+func (f *fakeTraining) DeleteByUser(_ context.Context, userID uuid.UUID) error {
+	if f.deleteErr != nil {
+		return f.deleteErr
+	}
+	f.deleted = append(f.deleted, userID)
+	kept := f.samples[:0]
+	for _, s := range f.samples {
+		if s.UserID != userID {
+			kept = append(kept, s)
+		}
+	}
+	f.samples = kept
+	return nil
+}
+
 type fakeFutureSelf struct {
 	fs *fsmodel.FutureSelf
 	// reads counts profile lookups, so a test can assert that a refused

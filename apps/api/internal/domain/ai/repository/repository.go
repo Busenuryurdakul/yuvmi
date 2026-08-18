@@ -41,3 +41,25 @@ type JobRepository interface {
 	// Called when consent is revoked mid-flight (PRD-AI 04, rule 6).
 	CancelPending(ctx context.Context, userID uuid.UUID, scope model.ConsentScope) error
 }
+
+// TrainingSampleRepository stores the corpus behind the ai_training_data scope.
+//
+// Every method is scoped to a user id, including the ones that take a job id.
+// That is not defensive habit: this table holds the raw prompts, so a lookup
+// that could be satisfied by guessing a job id would be the one place in the AI
+// stack where an identifier leak turns into a content leak.
+type TrainingSampleRepository interface {
+	// Create records a generation. Called best-effort after a successful run,
+	// so a failure here must not fail the user's request.
+	Create(ctx context.Context, sample *model.TrainingSample) error
+
+	// RecordDecision labels an existing sample. Returns ErrNotFound when the
+	// job has no sample — the ordinary case for a user who never granted the
+	// training scope, and so not an error worth surfacing to them.
+	RecordDecision(ctx context.Context, userID, jobID uuid.UUID, decision model.Decision, finalOutput []byte) error
+
+	// DeleteByUser removes everything collected from one user. Called when the
+	// training scope is revoked: consent withdrawn has to mean the corpus
+	// forgets, not merely that it stops growing.
+	DeleteByUser(ctx context.Context, userID uuid.UUID) error
+}

@@ -1,6 +1,7 @@
 package dto
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -45,6 +46,21 @@ type PlanTemplateSuggestion struct {
 type PlanSuggestionsResponse struct {
 	Templates []PlanTemplateSuggestion `json:"templates"`
 	JobID     uuid.UUID                `json:"jobId"`
+}
+
+// RecordDecisionRequest reports what the user did with a suggestion.
+//
+// The endpoint is fire-and-forget from the client's side: it reports the
+// decision without knowing whether the training scope is granted, and the
+// server decides whether there is anything to label.
+type RecordDecisionRequest struct {
+	Decision string `json:"decision" validate:"required,oneof=accepted edited rejected"`
+
+	// FinalOutput is the version the user kept. It is meaningful only with
+	// decision "edited" and is ignored otherwise; RawMessage rather than a
+	// typed shape because the payload differs per scope and this field is
+	// stored, never interpreted.
+	FinalOutput json.RawMessage `json:"finalOutput,omitempty"`
 }
 
 // AIJobResponse exposes accounting and status only. InputHash and prompt
