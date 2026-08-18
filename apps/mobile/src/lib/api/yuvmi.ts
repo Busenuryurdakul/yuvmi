@@ -15,6 +15,7 @@ import type {
   PlanResponse,
   SpaceInviteResponse,
   SpaceResponse,
+  SpendPearlsResponse,
   UserProfileResponse,
   WeeklyReviewResponse,
 } from "./types";
@@ -91,6 +92,17 @@ export async function deleteAccount(password?: string) {
 
 export async function fetchMe() {
   return apiRequest<UserProfileResponse>("/api/v1/me");
+}
+
+/** The route is registered as PATCH, not PUT — a PUT here 405s. There is no
+ *  pearlBalance field on purpose: the balance is server-owned and read-only. */
+export async function updateMe(body: {
+  displayName?: string;
+  avatarUrl?: string;
+  locale?: string;
+  timezone?: string;
+}) {
+  return apiRequest<UserProfileResponse>("/api/v1/me", { method: "PATCH", body });
 }
 
 export async function createFutureSelf(body: {
@@ -186,6 +198,19 @@ export async function skipTask(taskId: string, reason?: string) {
 
 export async function fetchPearlBalance() {
   return apiRequest<PearlBalanceResponse>("/api/v1/pearls/balance");
+}
+
+/**
+ * Deducts the cost of a cosmetic purchase server-side. The client sends what it
+ * wants to buy, never the resulting balance — the server owns the arithmetic,
+ * so a purchase survives leaving the screen instead of being overwritten by the
+ * next balance refetch.
+ */
+export async function spendPearls(item: string, amount: number) {
+  return apiRequest<SpendPearlsResponse>("/api/v1/pearls/spend", {
+    method: "POST",
+    body: { item, amount },
+  });
 }
 
 export async function confirmNotificationDesign() {

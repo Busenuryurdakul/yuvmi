@@ -146,6 +146,55 @@ func (r *UserRepo) GetPearlBalance(ctx context.Context, userID uuid.UUID) (int, 
 	return balance, nil
 }
 
+// SpendPearls locks the user row for the balance check so a concurrent spend
+// or award can't slip between the read and the deduction, which would let the
+// balance go negative or silently drop an award.
+func (r *UserRepo) SpendPearls(ctx context.Context, userID uuid.UUID, reason string, amount int) (int, bool, error) {
+	if amount <= 0 {
+		return 0, false, domainErr.New(domainErr.ErrValidation, "spend amount must be positive", nil)
+	}
+
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return 0, false, domainErr.New(domainErr.ErrInternal, "failed to start transaction", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var balance int
+	if err := tx.QueryRow(ctx,
+		`SELECT pearl_balance FROM users WHERE id = $1 FOR UPDATE`, userID,
+	).Scan(&balance); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, false, domainErr.New(domainErr.ErrNotFound, "user not found", nil)
+		}
+		return 0, false, domainErr.New(domainErr.ErrInternal, "failed to get pearl balance", err)
+	}
+
+	if balance < amount {
+		return balance, false, nil
+	}
+
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO pearl_awards (user_id, reason, amount) VALUES ($1, $2, $3)`,
+		userID, reason, -amount,
+	); err != nil {
+		return 0, false, domainErr.New(domainErr.ErrInternal, "failed to record pearl spend", err)
+	}
+
+	var newBalance int
+	if err := tx.QueryRow(ctx,
+		`UPDATE users SET pearl_balance = pearl_balance - $2 WHERE id = $1 RETURNING pearl_balance`,
+		userID, amount,
+	).Scan(&newBalance); err != nil {
+		return 0, false, domainErr.New(domainErr.ErrInternal, "failed to update pearl balance", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, false, domainErr.New(domainErr.ErrInternal, "failed to commit pearl spend", err)
+	}
+	return newBalance, true, nil
+}
+
 // AwardPearlsIfUnderDailyCap serializes concurrent award attempts for the
 // same user+reason with a transaction-scoped advisory lock, so the
 // count-then-award check can't race: only one caller at a time can be

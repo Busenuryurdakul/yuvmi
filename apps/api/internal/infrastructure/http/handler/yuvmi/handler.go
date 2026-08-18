@@ -699,6 +699,20 @@ func (h *Handler) GetPearlBalance(w http.ResponseWriter, r *http.Request) {
 	respond(w, http.StatusOK, data, err)
 }
 
+func (h *Handler) SpendPearls(w http.ResponseWriter, r *http.Request) {
+	userID, ok := requireUserID(w, r)
+	if !ok {
+		return
+	}
+	var req dto.SpendPearlsRequest
+	if err := validator.DecodeAndValidate(r, &req); err != nil {
+		response.YuvmiFail(w, err)
+		return
+	}
+	data, err := h.svc.SpendPearls(r.Context(), userID, req)
+	respond(w, http.StatusOK, data, err)
+}
+
 func (h *Handler) ConfirmNotificationDesign(w http.ResponseWriter, r *http.Request) {
 	userID, ok := requireUserID(w, r)
 	if !ok {

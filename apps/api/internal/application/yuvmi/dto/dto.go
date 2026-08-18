@@ -18,9 +18,16 @@ type UserProfileResponse struct {
 	Locale             string    `json:"locale"`
 	Timezone           string    `json:"timezone"`
 	OnboardingComplete bool      `json:"onboardingComplete"`
-	CreatedAt          time.Time `json:"createdAt"`
+	// PearlBalance is read-only and comes from users.pearl_balance, the
+	// authoritative İnci ledger. Omitted rather than sent as 0 when the
+	// lookup fails, so a client can't mistake "unknown" for "no pearls".
+	PearlBalance *int      `json:"pearlBalance,omitempty"`
+	CreatedAt    time.Time `json:"createdAt"`
 }
 
+// UpdateProfileRequest deliberately has no pearl balance field: pearls are
+// granted server-side through the award path (with its daily caps), never
+// set by the client.
 type UpdateProfileRequest struct {
 	DisplayName *string `json:"displayName"`
 	AvatarURL   *string `json:"avatarUrl"`
@@ -130,6 +137,22 @@ type DailyTaskResponse struct {
 // PearlBalanceResponse reports the user's current İnci (pearl) balance.
 type PearlBalanceResponse struct {
 	Balance int `json:"balance"`
+}
+
+// SpendPearlsRequest asks to deduct pearls for a cosmetic purchase. The client
+// sends what it wants to buy, never the resulting balance — the server owns
+// the arithmetic so a spend can't be forged or clobber a concurrent award.
+type SpendPearlsRequest struct {
+	Amount int    `json:"amount" validate:"required,gt=0,lte=1000"`
+	Item   string `json:"item" validate:"required,max=48"`
+}
+
+// SpendPearlsResponse reports the balance after the attempt. Spent is false
+// when the user couldn't afford the item; that is a normal answer, not an
+// error, and Balance still tells the client where it actually stands.
+type SpendPearlsResponse struct {
+	Balance int  `json:"balance"`
+	Spent   bool `json:"spent"`
 }
 
 // PearlAwardResponse reports the outcome of an attempted pearl award —

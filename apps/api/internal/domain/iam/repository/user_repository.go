@@ -20,6 +20,12 @@ type UserRepository interface {
 
 	// GetPearlBalance returns the user's current İnci (pearl) balance.
 	GetPearlBalance(ctx context.Context, userID uuid.UUID) (int, error)
+	// SpendPearls atomically deducts amount from the balance when the user can
+	// afford it and records the spend in the ledger as a negative award.
+	// Returns the resulting balance and whether the deduction happened —
+	// insufficient funds is a normal outcome, not an error. The client never
+	// sets a balance directly, so a stale client can't overwrite awards.
+	SpendPearls(ctx context.Context, userID uuid.UUID, reason string, amount int) (balance int, spent bool, err error)
 	// AwardPearls records a pearl award and atomically increments the user's
 	// balance, returning the new balance.
 	AwardPearls(ctx context.Context, userID uuid.UUID, reason string, amount int) (int, error)

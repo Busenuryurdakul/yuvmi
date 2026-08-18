@@ -246,6 +246,7 @@ func New(deps Dependencies) *chi.Mux {
 
 				r.Route("/pearls", func(r chi.Router) {
 					r.Get("/balance", deps.YuvmiHandler.GetPearlBalance)
+					r.Post("/spend", deps.YuvmiHandler.SpendPearls)
 				})
 
 				r.Route("/waves", func(r chi.Router) {

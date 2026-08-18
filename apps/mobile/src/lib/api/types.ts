@@ -96,6 +96,13 @@ export type PearlAwardResponse = {
   awarded: boolean;
 };
 
+/** `spent` is false when the balance couldn't cover the item — a normal
+ *  answer, not an error. `balance` is authoritative either way. */
+export type SpendPearlsResponse = {
+  balance: number;
+  spent: boolean;
+};
+
 export type CheckinResponse = {
   id: string;
   date: string;

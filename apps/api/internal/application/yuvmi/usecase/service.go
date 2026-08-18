@@ -100,11 +100,20 @@ func (s *Service) GetMe(ctx context.Context, userID uuid.UUID) (*dto.UserProfile
 			UserID: userID, DisplayName: displayName, Locale: "tr", Timezone: "Europe/Istanbul",
 		}
 	}
-	return &dto.UserProfileResponse{
+	resp := &dto.UserProfileResponse{
 		ID: userID, Email: user.Email, DisplayName: profile.DisplayName,
 		AvatarURL: profile.AvatarURL, Locale: profile.Locale, Timezone: profile.Timezone,
 		OnboardingComplete: profile.OnboardingComplete, CreatedAt: user.CreatedAt,
-	}, nil
+	}
+	// The balance lives on users, not user_profiles, so it has to be read
+	// separately. A failure here leaves the field omitted rather than
+	// failing the whole profile fetch.
+	if balance, err := s.users.GetPearlBalance(ctx, userID); err == nil {
+		resp.PearlBalance = &balance
+	} else {
+		slog.ErrorContext(ctx, "get pearl balance for profile failed", "user_id", userID, "error", err)
+	}
+	return resp, nil
 }
 
 func (s *Service) UpdateMe(ctx context.Context, userID uuid.UUID, req dto.UpdateProfileRequest) (*dto.UserProfileResponse, error) {
@@ -382,6 +391,21 @@ func (s *Service) GetPearlBalance(ctx context.Context, userID uuid.UUID) (*dto.P
 		return nil, err
 	}
 	return &dto.PearlBalanceResponse{Balance: balance}, nil
+}
+
+// SpendPearls deducts the cost of a cosmetic purchase. The item name rides
+// along into the ledger so a spend can be traced back to what was bought;
+// reason is capped to the column width.
+func (s *Service) SpendPearls(ctx context.Context, userID uuid.UUID, req dto.SpendPearlsRequest) (*dto.SpendPearlsResponse, error) {
+	reason := "shop:" + req.Item
+	if len(reason) > 64 {
+		reason = reason[:64]
+	}
+	balance, spent, err := s.users.SpendPearls(ctx, userID, reason, req.Amount)
+	if err != nil {
+		return nil, err
+	}
+	return &dto.SpendPearlsResponse{Balance: balance, Spent: spent}, nil
 }
 
 // awardPearlsWithDailyCap grants a pearl award unless the reason has already
