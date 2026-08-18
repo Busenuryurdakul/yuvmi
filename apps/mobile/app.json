@@ -6,6 +6,7 @@
     "orientation": "portrait",
     "scheme": "yuvmi",
     "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.yuvmi.app",
@@ -14,9 +15,15 @@
     "android": {
       "package": "com.yuvmi.app",
       "adaptiveIcon": {
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png",
         "backgroundColor": "#E7ECF9"
       },
       "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-router",
@@ -24,6 +31,14 @@
       "expo-apple-authentication",
       "expo-notifications",
       "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Vizyon panona ve arşivine görsel ekleyebilmen için Yuvmi galerine erişir. Yalnızca senin seçtiğin görseller yüklenir.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
       [
         "expo-splash-screen",
         {
