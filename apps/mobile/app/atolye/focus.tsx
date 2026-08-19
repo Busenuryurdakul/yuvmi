@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { SubpageScreen } from "@/components/ui/SubpageScreen";
 import { Glass, Eyebrow } from "@/components/ui/Glass";
 import { Button } from "@/components/ui/Button";
 import { useMode } from "@/context/ModeContext";
+import { loadShopInventory, type ShopFind } from "@/lib/local";
 import { theme } from "@/theme";
 
 const FINDS = [
@@ -31,8 +32,23 @@ export default function FocusDiveScreen() {
   const [phase, setPhase] = useState<"idle" | "diving" | "done">("idle");
   const [finds, setFinds] = useState<string[]>([]);
   const [lastFind, setLastFind] = useState("");
+  const [sounds, setSounds] = useState<ShopFind[]>([]);
+  const [soundName, setSoundName] = useState<string | null>(null);
   const [diverPos] = useState(() => new Animated.Value(6));
   const ref = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadShopInventory().then((items) => {
+        const next = items.filter((item) => item.tab === "sound");
+        setSounds(next);
+        setSoundName((prev) => {
+          if (prev && next.some((item) => item.name === prev)) return prev;
+          return next[0]?.name ?? null;
+        });
+      });
+    }, []),
+  );
 
   useEffect(() => {
     return () => {
@@ -172,6 +188,32 @@ export default function FocusDiveScreen() {
           </View>
         </View>
 
+        {sounds.length > 0 ? (
+          <>
+            <Eyebrow style={{ textAlign: "left", marginTop: 10 }}>Ambiyans</Eyebrow>
+            <View style={styles.pick}>
+              {sounds.map((s) => (
+                <Pressable
+                  key={s.name}
+                  style={[
+                    styles.pk,
+                    soundName === s.name && styles.pkOn,
+                    phase !== "idle" && styles.pkDisabled,
+                  ]}
+                  disabled={phase !== "idle"}
+                  onPress={() => {
+                    if (phase === "idle") setSoundName(s.name);
+                  }}
+                >
+                  <Text style={[styles.pkText, soundName === s.name && styles.pkTextOn]}>
+                    {s.emoji} {s.name}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </>
+        ) : null}
+
         <View style={styles.dive}>
           <View style={styles.diveGrad}>
             <View style={[styles.dline, { top: "33%" }]} />
@@ -184,6 +226,10 @@ export default function FocusDiveScreen() {
         </View>
 
         <Text style={styles.timer}>{left == null ? fmt(duration * 60) : fmt(left)}</Text>
+
+        {phase === "diving" && soundName ? (
+          <Text style={styles.findText}>{soundName}</Text>
+        ) : null}
 
         {phase === "done" && lastFind ? (
           <Text style={styles.findText}>Dipten buluntu: {lastFind}</Text>

@@ -320,6 +320,7 @@ func New(deps Dependencies) *chi.Mux {
 						r.Use(middleware.RateLimit(10, time.Minute))
 						r.Post("/goal-suggestions", deps.AIHandler.GoalSuggestions)
 						r.Post("/plan-suggestions", deps.AIHandler.PlanSuggestions)
+						r.Post("/companion-chat", deps.AIHandler.CompanionChat)
 					})
 				})
 			}

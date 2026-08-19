@@ -446,6 +446,9 @@ func buildDependencies(
 		Provider:   aiProvider,
 		FutureSelf: futureSelfRepo,
 		Goals:      goalRepo,
+		Plans:      planRepo,
+		Tasks:      taskRepo,
+		Checkins:   checkinRepo,
 		Cfg:        cfg.AI,
 	})
 	deps.AIHandler = aiHandlerPkg.NewHandler(aiSvc)

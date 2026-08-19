@@ -17,6 +17,7 @@ const (
 
 	maxTitleLen       = 60
 	maxDescriptionLen = 160
+	maxCompanionReply = 800
 )
 
 // validateGoalSuggestions drops unusable entries and caps the list. Over-long
@@ -93,6 +94,14 @@ func validatePlanTemplates(raw []dto.PlanTemplateSuggestion) []dto.PlanTemplateS
 		}
 	}
 	return out
+}
+
+func validateCompanionReply(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return ""
+	}
+	return truncateWords(s, maxCompanionReply)
 }
 
 // truncateWords shortens s to at most max characters, cutting at the last word

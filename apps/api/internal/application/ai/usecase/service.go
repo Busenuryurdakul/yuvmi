@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,7 +20,9 @@ import (
 	aimodel "github.com/masterfabric-go/masterfabric/internal/domain/ai/model"
 	airepo "github.com/masterfabric-go/masterfabric/internal/domain/ai/repository"
 	aiService "github.com/masterfabric-go/masterfabric/internal/domain/ai/service"
+	fsmodel "github.com/masterfabric-go/masterfabric/internal/domain/futureself/model"
 	fsRepo "github.com/masterfabric-go/masterfabric/internal/domain/futureself/repository"
+	goalmodel "github.com/masterfabric-go/masterfabric/internal/domain/goal/model"
 	goalRepo "github.com/masterfabric-go/masterfabric/internal/domain/goal/repository"
 	"github.com/masterfabric-go/masterfabric/internal/shared/config"
 	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
@@ -32,6 +35,9 @@ type Service struct {
 	provider   aiService.Provider
 	futureSelf fsRepo.FutureSelfRepository
 	goals      goalRepo.GoalRepository
+	plans      companionPlanSource
+	tasks      companionTaskSource
+	checkins   companionCheckinSource
 	cfg        config.AIConfig
 }
 
@@ -45,6 +51,9 @@ type Deps struct {
 	Provider   aiService.Provider
 	FutureSelf fsRepo.FutureSelfRepository
 	Goals      goalRepo.GoalRepository
+	Plans      companionPlanSource
+	Tasks      companionTaskSource
+	Checkins   companionCheckinSource
 	Cfg        config.AIConfig
 }
 
@@ -56,6 +65,9 @@ func NewService(deps Deps) *Service {
 		provider:   deps.Provider,
 		futureSelf: deps.FutureSelf,
 		goals:      deps.Goals,
+		plans:      deps.Plans,
+		tasks:      deps.Tasks,
+		checkins:   deps.Checkins,
 		cfg:        deps.Cfg,
 	}
 }
@@ -210,6 +222,120 @@ func (s *Service) PlanSuggestions(ctx context.Context, userID uuid.UUID) (*dto.P
 	}
 
 	return &dto.PlanSuggestionsResponse{Templates: templates, JobID: jobID}, nil
+}
+
+const (
+	maxCompanionHistory = 8
+	maxCompanionMessage = 500
+)
+
+// CompanionChat answers one turn of the Yuvmi tab. Profile and goal stay in
+// the prompt; plan steps, a 7-day rhythm summary and today's intention are
+// attached by allow-list (1–2 slices per question). Nothing here writes back.
+func (s *Service) CompanionChat(ctx context.Context, userID uuid.UUID, message string, history []dto.ChatTurn) (*dto.CompanionChatResponse, error) {
+	message = strings.TrimSpace(message)
+	if message == "" || len([]rune(message)) > maxCompanionMessage {
+		return nil, domainErr.New(domainErr.ErrValidation, "message must be 1-500 characters", nil)
+	}
+	if len(history) > maxCompanionHistory {
+		history = history[len(history)-maxCompanionHistory:]
+	}
+
+	if err := s.guard(ctx, userID, aimodel.ScopeCompanion); err != nil {
+		return nil, err
+	}
+
+	fs, err := s.optionalFutureSelf(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	goal, err := s.optionalGoal(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	slices := selectCompanionSlices(message)
+	var planView *companionPlanView
+	var weekView *companionWeekView
+	var todayView *companionTodayView
+	for _, slice := range slices {
+		switch slice {
+		case slicePlan:
+			planView, err = s.loadCompanionPlan(ctx, userID)
+		case sliceWeek:
+			weekView, err = s.loadCompanionWeek(ctx, userID)
+		case sliceToday:
+			todayView, err = s.loadCompanionToday(ctx, userID)
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	book := pickCompanionPlaybook(message)
+	recordBlock := renderCompanionSlices(planView, weekView, todayView, slices, book)
+
+	turns := make([]companionTurn, 0, len(history))
+	for _, h := range history {
+		role := strings.TrimSpace(h.Role)
+		text := strings.TrimSpace(h.Text)
+		if text == "" {
+			continue
+		}
+		if role != "user" && role != "assistant" {
+			continue
+		}
+		turns = append(turns, companionTurn{Role: role, Text: text})
+	}
+
+	var payload struct {
+		Reply string `json:"reply"`
+	}
+	jobID, err := s.generate(ctx, userID, aimodel.ScopeCompanion,
+		buildCompanionContext(fs, goal, recordBlock, turns, message), companionChatSchema, &payload)
+	if err != nil {
+		return nil, err
+	}
+
+	reply := validateCompanionReply(payload.Reply)
+	if reply == "" {
+		s.failJob(ctx, jobID, aimodel.ErrCodeInvalidOutput)
+		return nil, domainErr.New(domainErr.ErrInternal, "ai returned no usable reply", nil)
+	}
+
+	out := &dto.CompanionChatResponse{Reply: reply, JobID: jobID}
+	if book != nil {
+		out.PlaybookID = book.ID
+		out.PlaybookTitle = book.Title
+	}
+	return out, nil
+}
+
+func (s *Service) optionalFutureSelf(ctx context.Context, userID uuid.UUID) (*fsmodel.FutureSelf, error) {
+	if s.futureSelf == nil {
+		return nil, nil
+	}
+	fs, err := s.futureSelf.GetByUserID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, domainErr.ErrNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return fs, nil
+}
+
+func (s *Service) optionalGoal(ctx context.Context, userID uuid.UUID) (*goalmodel.Goal, error) {
+	if s.goals == nil {
+		return nil, nil
+	}
+	goal, err := s.goals.GetLatestByUserID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, domainErr.ErrNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return goal, nil
 }
 
 func (s *Service) GetJob(ctx context.Context, userID, jobID uuid.UUID) (*dto.AIJobResponse, error) {

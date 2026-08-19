@@ -17,6 +17,7 @@ const (
 	ScopeDailyTask         ConsentScope = "ai_daily_task"
 	ScopeWeeklyReview      ConsentScope = "ai_weekly_review"
 	ScopeSharedSpace       ConsentScope = "ai_shared_space"
+	ScopeCompanion         ConsentScope = "ai_companion"
 	ScopeDataExport        ConsentScope = "data_export"
 
 	// ScopeTrainingData permits keeping a suggestion and the user's reaction to
@@ -37,6 +38,7 @@ func AllScopes() []ConsentScope {
 		ScopeDailyTask,
 		ScopeWeeklyReview,
 		ScopeSharedSpace,
+		ScopeCompanion,
 		ScopeDataExport,
 		ScopeTrainingData,
 	}

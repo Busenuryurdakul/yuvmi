@@ -80,7 +80,7 @@ const styles = StyleSheet.create({
   toprow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "baseline",
+    alignItems: "center",
     marginBottom: 14,
   },
   title: {

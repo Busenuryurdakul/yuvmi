@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { SubpageScreen } from "@/components/ui/SubpageScreen";
 import { Glass, Eyebrow } from "@/components/ui/Glass";
 import { useMode } from "@/context/ModeContext";
+import { loadShopInventory } from "@/lib/local";
 import { alert } from "@/lib/alert";
 import { theme } from "@/theme";
 
@@ -23,6 +24,22 @@ export default function GardenScreen() {
   const tohum = prefs?.tohum ?? 48; // İnci balance
   const [plants, setPlants] = useState(INITIAL_PLANTS);
   const [watered, setWatered] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadShopInventory().then((items) => {
+        const extras: Plant[] = items
+          .filter((item) => item.tab === "garden")
+          .map((item) => ({
+            emoji: item.emoji,
+            name: item.name,
+            pct: 100,
+            status: "kıyıdan · bahçede",
+          }));
+        setPlants([...INITIAL_PLANTS, ...extras]);
+      });
+    }, []),
+  );
 
   const growCount = plants.filter((p) => !p.sleep).length;
   const sleepCount = plants.filter((p) => p.sleep).length;
@@ -66,7 +83,9 @@ export default function GardenScreen() {
                   }
                 >
                   <Text style={styles.plantEmoji}>{plant.emoji}</Text>
-                  <Text style={styles.plotLabel}>{plant.name}</Text>
+                  <Text style={styles.plotLabel} numberOfLines={2}>
+                    {plant.name}
+                  </Text>
                 </Pressable>
               );
             }
@@ -106,7 +125,8 @@ export default function GardenScreen() {
           </View>
         ))}
         <Text style={styles.hint}>
-          Mercan bahçesi bir puan tablosu değil — planına hiçbir etkisi yok. Sadece emeğinin şekli.
+          Dükkândan aldığın mercanlar boş parsele düşer. Bahçe bir puan tablosu değil —
+          planına etkisi yok, sadece emeğinin ve kıyıdan topladıklarının şekli.
         </Text>
       </Glass>
     </SubpageScreen>

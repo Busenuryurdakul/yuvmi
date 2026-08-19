@@ -8,6 +8,8 @@ import type {
   ConsentResponse,
   GoalSuggestionsResponse,
   PlanSuggestionsResponse,
+  CompanionChatResponse,
+  CompanionChatTurn,
   CheckinResponse,  DailyTaskResponse,
   FutureSelfResponse,
   GoalResponse,
@@ -489,6 +491,13 @@ export async function fetchPlanSuggestions() {
   return apiRequest<PlanSuggestionsResponse>("/api/v1/ai/plan-suggestions", {
     method: "POST",
     body: {},
+  });
+}
+
+export async function sendCompanionChat(message: string, history: CompanionChatTurn[]) {
+  return apiRequest<CompanionChatResponse>("/api/v1/ai/companion-chat", {
+    method: "POST",
+    body: { message, history },
   });
 }
 

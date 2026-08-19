@@ -26,6 +26,7 @@ export type ConsentScope =
   | "ai_daily_task"
   | "ai_weekly_review"
   | "ai_shared_space"
+  | "ai_companion"
   | "data_export"
   /** Retaining a suggestion and the user's reaction to it for model
    *  improvement — a separate purpose from the generation scopes above, so it

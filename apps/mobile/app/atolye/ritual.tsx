@@ -10,7 +10,7 @@ import { theme } from "@/theme";
 
 const BLOCKS = [
   { id: "breath", label: "Nefes" },
-  { id: "candle", label: "Mum" },
+  { id: "candle", label: "Fener" },
   { id: "card", label: "Kart" },
   { id: "intent", label: "Niyet" },
 ] as const;
@@ -53,7 +53,7 @@ export default function RitualBuilderScreen() {
       <Glass style={styles.stat}>
         <Eyebrow style={styles.lbl}>Ritüellerin</Eyebrow>
         {rituals.length === 0 ? (
-          <Text style={styles.body}>Nefes, mum, kart gibi adımları sıraya koyarak kendi ritüelini kurarsın.</Text>
+          <Text style={styles.body}>Nefes, fener, kart gibi adımları sıraya koyarak kendi ritüelini kurarsın.</Text>
         ) : (
           rituals.map((r) => (
             <View key={r.id} style={styles.row}>

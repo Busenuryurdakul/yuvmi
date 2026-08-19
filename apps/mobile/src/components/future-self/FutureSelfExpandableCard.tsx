@@ -178,7 +178,6 @@ const styles = StyleSheet.create({
   affirmation: {
     fontSize: theme.font.size.sm,
     color: theme.color.text.primary,
-    fontStyle: "italic",
     lineHeight: 22,
   },
   visionItem: {

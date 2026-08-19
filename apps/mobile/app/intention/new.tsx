@@ -118,7 +118,7 @@ export default function NewIntentionScreen() {
         <PickGroup options={DOMAINS} value={domain} onChange={setDomain} />
       </Field>
       <Button label="Niyeti kaydet" loading={saving} onPress={() => void save()} />
-      <Text style={styles.note}>Niyetler istediğin zaman değişir. Plan v2 olur, geçmişin silinmez.</Text>
+      <Text style={styles.note}>Niyeti sonra da değiştirebilirsin. Eski planın durur, silinmez.</Text>
     </SubpageScreen>
   );
 }

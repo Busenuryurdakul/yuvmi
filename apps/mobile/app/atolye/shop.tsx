@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { router, useFocusEffect } from "expo-router";
 import { SubpageScreen } from "@/components/ui/SubpageScreen";
-import { Eyebrow } from "@/components/ui/Glass";
 import { useMode } from "@/context/ModeContext";
+import { addShopFind, loadShopInventory, shopItemKey, type ShopTab } from "@/lib/local";
 import { spendPearls } from "@/lib/api/yuvmi";
 import { alert } from "@/lib/alert";
 import { theme } from "@/theme";
@@ -38,7 +39,7 @@ const SHOP: Record<string, ShopItem[]> = {
   ],
 };
 
-const TABS = [
+const TABS: { key: ShopTab; label: string }[] = [
   { key: "garden", label: "Mercan" },
   { key: "seal", label: "Mühür" },
   { key: "sound", label: "Ambiyans" },
@@ -47,15 +48,23 @@ const TABS = [
 export default function ShopScreen() {
   const { prefs, patchPrefs } = useMode();
   const tohum = prefs?.tohum ?? 48; // Treated as İnci balance
-  const [tab, setTab] = useState("garden");
+  const [tab, setTab] = useState<ShopTab>("garden");
   const [owned, setOwned] = useState<Set<string>>(new Set());
   const [buying, setBuying] = useState<string | null>(null);
 
+  useFocusEffect(
+    useCallback(() => {
+      void loadShopInventory().then((items) => {
+        setOwned(new Set(items.map((item) => shopItemKey(item.tab, item.name))));
+      });
+    }, []),
+  );
+
   async function buy(item: ShopItem) {
-    const key = `${tab}:${item.name}`;
+    const key = shopItemKey(tab, item.name);
     if (owned.has(key) || buying) return;
     if (tohum < item.cost) {
-      alert("Biraz daha İnci lazım 🫧", `${item.cost - tohum} İnci eksik. Aceleye gerek yok.`);
+      alert("Biraz daha İnci lazım", `${item.cost - tohum} İnci eksik. Aceleye gerek yok.`);
       return;
     }
 
@@ -68,7 +77,7 @@ export default function ShopScreen() {
       const res = await spendPearls(item.name, item.cost);
       await patchPrefs({ tohum: res.balance });
       if (!res.spent) {
-        alert("Biraz daha İnci lazım 🫧", `${item.name} için yeterli İnci yok. Aceleye gerek yok.`);
+        alert("Biraz daha İnci lazım", `${item.name} için yeterli İnci yok. Aceleye gerek yok.`);
         return;
       }
     } catch {
@@ -78,21 +87,41 @@ export default function ShopScreen() {
       setBuying(null);
     }
 
+    await addShopFind({
+      tab,
+      name: item.name,
+      emoji: item.emoji,
+      boughtAt: new Date().toISOString(),
+    });
     setOwned((prev) => new Set(prev).add(key));
 
-    const messages: Record<string, string> = {
-      garden: `${item.name} mercan bahçene eklendi.`,
-      seal: `${item.name} mektup kutuna eklendi.`,
-      sound: `${item.name} ambiyansı açıldı — dalışta kullanabilirsin.`,
-    };
-    alert(`✓ ${item.name}`, messages[tab]);
+    if (tab === "garden") {
+      alert(`${item.name} bahçede`, "Mercan Bahçesi’ndeki boş parsele düştü. Planına etkisi yok — süs.", [
+        { text: "Bahçeye git", onPress: () => router.push("/atolye/garden") },
+        { text: "Tamam", style: "cancel" },
+      ]);
+      return;
+    }
+    if (tab === "seal") {
+      alert(`${item.name} alındı`, "Mektup yazarken mühür olarak seçebilirsin.", [
+        { text: "Mektup kutusu", onPress: () => router.push("/vision/letter") },
+        { text: "Tamam", style: "cancel" },
+      ]);
+      return;
+    }
+    alert(`${item.name} alındı`, "Odak dalışında bu ambiyansı seçebilirsin.", [
+      { text: "Dalışa git", onPress: () => router.push("/atolye/focus") },
+      { text: "Tamam", style: "cancel" },
+    ]);
   }
 
   const items = SHOP[tab] ?? [];
 
   return (
     <SubpageScreen title="Kıyıya Vuranlar (Dükkân)" right={`🫧 ${tohum}`}>
-      <Text style={styles.sub}>Buradaki her şey tamamen kozmetiktir. Odaklanma sürecini hızlandıracak kestirme yollar veya gerçek parayla satılan ögeler bulunmaz. Kendi ritminde keşfet! 🫧</Text>
+      <Text style={styles.sub}>
+        Mercanlar bahçeye, mühürler mektuba, ambiyans dalışa gider. Hepsi süs — plana etkisi yok.
+      </Text>
 
       <View style={styles.tabs}>
         {TABS.map((t) => (

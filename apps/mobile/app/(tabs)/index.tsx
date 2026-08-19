@@ -148,7 +148,6 @@ export default function TodayScreen() {
     useTodayDashboard();
 
   const [seg, setSeg] = useState(0);
-  const [visitedSegs, setVisitedSegs] = useState<ReadonlySet<number>>(() => new Set([0]));
   const [picks, setPicks] = useState<Record<string, IntentionState>>({});
   const [offTrack, setOffTrack] = useState(false);
   const [savingMood, setSavingMood] = useState(false);
@@ -259,21 +258,16 @@ export default function TodayScreen() {
   const missDays = ticks.filter((t) => t === "none").length;
   const streak = streakFromTicks(ticks);
   const returns = plans.filter((p) => p.status === "superseded").length;
-  const markVisited = (i: number) => {
-    setVisitedSegs((prev) => (prev.has(i) ? prev : new Set(prev).add(i)));
-  };
 
   const go = (i: number) => {
     const next = Math.max(0, Math.min(2, i));
     setSeg(next);
-    markVisited(next);
     pagerRef.current?.scrollTo({ x: next * width, animated: true });
   };
 
   const onPagerScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const i = Math.round(e.nativeEvent.contentOffset.x / width);
-    if (i !== seg) setSeg(i);
-    markVisited(i);
+    const i = Math.round(e.nativeEvent.contentOffset.x / Math.max(width, 1));
+    if (i !== seg && i >= 0 && i < 3) setSeg(i);
   };
 
   async function handleDeleteIntention(stepId: string) {
@@ -471,7 +465,6 @@ export default function TodayScreen() {
           showsVerticalScrollIndicator={false}
           refreshControl={refreshControl}
         >
-          {visitedSegs.has(0) ? (
           <>
           <AccordionStat label="Ritim · son 14 gün" defaultOpen>
             <RhythmStrip ticks={ticks} />
@@ -526,7 +519,6 @@ export default function TodayScreen() {
 
           <Button label="Haftalık değerlendirmeyi aç" onPress={() => router.push("/weekly-review")} />
           </>
-          ) : null}
         </ScrollView>
 
         {/* Plan */}
@@ -536,7 +528,6 @@ export default function TodayScreen() {
           showsVerticalScrollIndicator={false}
           refreshControl={refreshControl}
         >
-          {visitedSegs.has(1) ? (
           <>
           {/* Card draw widget */}
           <Pressable
@@ -703,7 +694,6 @@ export default function TodayScreen() {
             </>
           )}
           </>
-          ) : null}
         </ScrollView>
 
         {/* Hâl */}
@@ -713,7 +703,6 @@ export default function TodayScreen() {
           showsVerticalScrollIndicator={false}
           refreshControl={refreshControl}
         >
-          {visitedSegs.has(2) ? (
           <>
           <StatBlock label="Bugün nasılsın?">
             <View style={styles.moods}>
@@ -757,7 +746,6 @@ export default function TodayScreen() {
             <Text style={styles.toStatsText}>Ruh hâli geçmişini istatistiklerde gör →</Text>
           </Pressable>
           </>
-          ) : null}
         </ScrollView>
       </ScrollView>
 

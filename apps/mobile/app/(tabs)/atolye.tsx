@@ -32,7 +32,7 @@ export default function AtolyeScreen() {
         eyebrow="Atölyen"
         eyebrowRight={
           <Pressable onPress={() => setBalanceSheetOpen(true)} style={styles.balance}>
-            <Text style={styles.balanceText}>🫧 {tohum} İnci</Text>
+            <Text style={styles.balanceText}>{tohum} İnci</Text>
           </Pressable>
         }
         title="Atölye"
@@ -61,7 +61,7 @@ export default function AtolyeScreen() {
             onPress={() => setBalanceSheetOpen(false)}
           />
           <View style={styles.sheetCard}>
-            <Text style={styles.sheetTitle}>İnci Göstergesi 🫧</Text>
+            <Text style={styles.sheetTitle}>İnci göstergesi</Text>
             <Text style={styles.sheetBody}>
               Kıyıya vuranlar dükkanına mı yoksa Mercan Bahçesi&apos;ne mi gitmek istersin?
             </Text>
@@ -99,8 +99,8 @@ export default function AtolyeScreen() {
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         {/* 1. OLUŞTUR */}
         <Glass style={styles.card}>
-          <Eyebrow style={styles.lbl}>🛠️ 1. OLUŞTUR</Eyebrow>
-          <Text style={styles.cardTitle}>&quot;Kendi sistemlerini tasarla&quot;</Text>
+          <Eyebrow style={styles.lbl}>🛠️ Oluştur</Eyebrow>
+          <Text style={styles.cardTitle}>Kendi sistemlerini tasarla</Text>
           <View style={styles.rows}>
             <TapRow
               title="🔔 Bildirim tasarla"
@@ -115,8 +115,8 @@ export default function AtolyeScreen() {
 
         {/* 2. YAZ */}
         <Glass style={styles.card}>
-          <Eyebrow style={styles.lbl}>✍️ 2. YAZ</Eyebrow>
-          <Text style={styles.cardTitle}>&quot;Düşüncelerini dışa vur&quot;</Text>
+          <Eyebrow style={styles.lbl}>✍️ Yaz</Eyebrow>
+          <Text style={styles.cardTitle}>Düşüncelerini dışa vur</Text>
           <View style={styles.rows}>
             <TapRow title="✉️ Mektup kutusu" subtitle="Yaz, mühürle, gelecekteki bir tarihte aç" nested onPress={() => router.push("/vision/letter")} />
             <TapRow title="🍾 Şişeye koy ve bırak" subtitle="Yaz ve denize bırak, akıntıyla uzaklaşsın" nested onPress={() => router.push("/atolye/release")} />
@@ -125,10 +125,10 @@ export default function AtolyeScreen() {
 
         {/* 3. ODAK */}
         <Glass style={styles.card}>
-          <Eyebrow style={styles.lbl}>🧘 3. ODAK</Eyebrow>
-          <Text style={styles.cardTitle}>&quot;Şimdiye dön&quot;</Text>
+          <Eyebrow style={styles.lbl}>🧘 Odak</Eyebrow>
+          <Text style={styles.cardTitle}>Şimdiye dön</Text>
           <View style={styles.rows}>
-            <TapRow title="🤿 Gerçek Dalış" subtitle="Metreler indikçe derinleşen odak sayacı" nested onPress={() => router.push("/atolye/focus")} />
+            <TapRow title="🤿 Gerçek dalış" subtitle="Metreler indikçe derinleşen odak sayacı" nested onPress={() => router.push("/atolye/focus")} />
             <TapRow title="🌬️ Nefes molası" subtitle="Kutucuklu nefes egzersizi (4-4-4)" nested onPress={() => router.push("/atolye/breath")} />
             <TapRow title="🕯️ Niyet feneri" subtitle="Niyetini fenerin ışığına bağlayıp odaklan" nested onPress={() => router.push("/atolye/candle")} />
           </View>
@@ -136,8 +136,8 @@ export default function AtolyeScreen() {
 
         {/* 4. ORTAK ALAN */}
         <Glass style={styles.card}>
-          <Eyebrow style={styles.lbl}>👥 4. ORTAK ALAN</Eyebrow>
-          <Text style={styles.cardTitle}>&quot;Yakınlarınla paylaş&quot;</Text>
+          <Eyebrow style={styles.lbl}>👥 Ortak alan</Eyebrow>
+          <Text style={styles.cardTitle}>Yakınlarınla paylaş</Text>
           
           <Glass style={[styles.innerCard, { padding: 14 }]}>
             <Eyebrow style={{ fontSize: 10.5, marginBottom: 8 }}>ORTAK ALAN</Eyebrow>
@@ -188,7 +188,6 @@ const styles = StyleSheet.create({
     fontWeight: theme.font.weight.semibold,
     fontSize: 12.5,
     color: theme.color.ink70,
-    fontStyle: "italic",
     marginBottom: 12,
   },
   rows: {

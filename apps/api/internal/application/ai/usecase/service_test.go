@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -13,6 +14,7 @@ import (
 	aimodel "github.com/masterfabric-go/masterfabric/internal/domain/ai/model"
 	fsmodel "github.com/masterfabric-go/masterfabric/internal/domain/futureself/model"
 	goalmodel "github.com/masterfabric-go/masterfabric/internal/domain/goal/model"
+	profilemodel "github.com/masterfabric-go/masterfabric/internal/domain/profile/model"
 	"github.com/masterfabric-go/masterfabric/internal/shared/config"
 	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
 )
@@ -36,6 +38,9 @@ type harness struct {
 	training   *fakeTraining
 	provider   *fakeProvider
 	futureSelf *fakeFutureSelf
+	plans      *fakePlans
+	tasks      *fakeTasks
+	checkins   *fakeCheckins
 	userID     uuid.UUID
 }
 
@@ -45,6 +50,9 @@ func newHarness(t *testing.T, provider *fakeProvider, grants ...aimodel.ConsentS
 	jobs := &fakeJobs{}
 	training := &fakeTraining{}
 	futureSelf := &fakeFutureSelf{fs: testFutureSelf()}
+	plans := &fakePlans{plan: testActivePlan()}
+	tasks := &fakeTasks{}
+	checkins := &fakeCheckins{}
 	svc := NewService(Deps{
 		Consents:   consents,
 		Jobs:       jobs,
@@ -55,11 +63,27 @@ func newHarness(t *testing.T, provider *fakeProvider, grants ...aimodel.ConsentS
 			ID: uuid.New(), Title: "Daha düzenli uyumak",
 			Description: "Gece 23:00'te yatağa girmek",
 		}},
-		Cfg: config.AIConfig{MaxTokens: 1024, DailyQuota: 20},
+		Plans:    plans,
+		Tasks:    tasks,
+		Checkins: checkins,
+		Cfg:      config.AIConfig{MaxTokens: 1024, DailyQuota: 20},
 	})
 	return &harness{
 		svc: svc, consents: consents, jobs: jobs, training: training,
-		provider: provider, futureSelf: futureSelf, userID: uuid.New(),
+		provider: provider, futureSelf: futureSelf,
+		plans: plans, tasks: tasks, checkins: checkins, userID: uuid.New(),
+	}
+}
+
+func testActivePlan() *goalmodel.Plan {
+	return &goalmodel.Plan{
+		Title: "Uyku ritmi",
+		Steps: []goalmodel.PlanStep{
+			{SortOrder: 1, Title: "Ekranı kapat", Description: "23:00'te telefonu başka odaya bırak"},
+			{SortOrder: 2, Title: "Işıkları kıs", Description: "Yatak odasını loş bırak"},
+			{SortOrder: 3, Title: "Çay yerine su", Description: "Akşam kafeinsiz bitir"},
+			{SortOrder: 4, Title: "Aynı saatte yat", Description: "Hafta içi alarmı koru"},
+		},
 	}
 }
 
@@ -471,4 +495,60 @@ func TestRecordDecision_IgnoresAnotherUsersJob(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, aimodel.DecisionPending, h.training.samples[0].Decision,
 		"another user's report must not label this sample")
+}
+
+func TestCompanionChat_WithoutConsentNeverCallsProvider(t *testing.T) {
+	h := newHarness(t, okProvider(`{"reply":"Merhaba."}`))
+
+	_, err := h.svc.CompanionChat(context.Background(), h.userID, "Planımı gözden geçir", nil)
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, domainErr.ErrForbidden))
+	assert.Zero(t, h.provider.calls)
+	assert.Zero(t, h.futureSelf.reads, "profile must not be loaded before consent")
+}
+
+func TestCompanionChat_WithConsentReturnsReply(t *testing.T) {
+	h := newHarness(t, okProvider(`{"reply":"Adımlarını küçültmek ritmi bozmaz."}`), aimodel.ScopeCompanion)
+
+	resp, err := h.svc.CompanionChat(context.Background(), h.userID, "Neden olmuyor?", nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, "Adımlarını küçültmek ritmi bozmaz.", resp.Reply)
+	assert.Equal(t, "why_stuck", resp.PlaybookID)
+	assert.Equal(t, "Neden olmuyor", resp.PlaybookTitle)
+	assert.Equal(t, 1, h.provider.calls)
+	require.NotNil(t, h.provider.lastReq)
+	assert.Contains(t, h.provider.lastReq.UserContext, "Neden olmuyor?")
+	assert.Contains(t, h.provider.lastReq.UserContext, "Ekranı kapat")
+	assert.Contains(t, h.provider.lastReq.UserContext, "playbook")
+}
+
+func TestCompanionChat_WeekSummaryUsesRecordsNotInvention(t *testing.T) {
+	h := newHarness(t, okProvider(`{"reply":"Son 7 günde 2 check-in var."}`), aimodel.ScopeCompanion)
+	h.checkins.since = []*profilemodel.TodayEntry{
+		{Mood: 4, Energy: 3, Reflection: "gizli metin"},
+		{Mood: 2, Energy: 2},
+	}
+	h.tasks.recent = []*goalmodel.DailyTask{
+		{Date: time.Now().UTC(), Title: "Ekranı kapat", Status: goalmodel.TaskCompleted},
+		{Date: time.Now().UTC().AddDate(0, 0, -1), Title: "Işıkları kıs", Status: goalmodel.TaskSkipped},
+	}
+
+	_, err := h.svc.CompanionChat(context.Background(), h.userID, "Haftamı özetle", nil)
+
+	require.NoError(t, err)
+	ctx := h.provider.lastReq.UserContext
+	assert.Contains(t, ctx, "Check-in: 2 gün")
+	assert.Contains(t, ctx, "1 tamamlandı")
+	assert.Contains(t, ctx, "1 atlandı")
+	assert.Contains(t, ctx, "Haftayı özetlemek")
+	assert.NotContains(t, ctx, "gizli metin")
+	assert.Contains(t, ctx, "Uyku ritmi")
+}
+
+func TestSelectCompanionSlices_CapsAtTwo(t *testing.T) {
+	assert.Equal(t, []string{sliceWeek, slicePlan}, selectCompanionSlices("Haftamı özetle"))
+	assert.Equal(t, []string{sliceToday, slicePlan}, selectCompanionSlices("Bugünü küçült"))
+	assert.Equal(t, []string{slicePlan, sliceWeek}, selectCompanionSlices("Merhaba"))
 }

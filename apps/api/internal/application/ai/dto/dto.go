@@ -48,6 +48,23 @@ type PlanSuggestionsResponse struct {
 	JobID     uuid.UUID                `json:"jobId"`
 }
 
+type ChatTurn struct {
+	Role string `json:"role" validate:"required,oneof=user assistant"`
+	Text string `json:"text" validate:"required,max=800"`
+}
+
+type CompanionChatRequest struct {
+	Message string     `json:"message" validate:"required,min=1,max=500"`
+	History []ChatTurn `json:"history" validate:"max=8,dive"`
+}
+
+type CompanionChatResponse struct {
+	Reply         string    `json:"reply"`
+	JobID         uuid.UUID `json:"jobId"`
+	PlaybookID    string    `json:"playbookId,omitempty"`
+	PlaybookTitle string    `json:"playbookTitle,omitempty"`
+}
+
 // RecordDecisionRequest reports what the user did with a suggestion.
 //
 // The endpoint is fire-and-forget from the client's side: it reports the

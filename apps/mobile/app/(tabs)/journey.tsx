@@ -1,14 +1,24 @@
-import { useCallback, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useCallback, useRef, useState } from "react";
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  useWindowDimensions,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from "react-native";
 import { router, useFocusEffect, type Href } from "expo-router";
-import { Screen } from "@/components/ui/Screen";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingScreen } from "@/components/ui/LoadingScreen";
-import { Eyebrow, Glass } from "@/components/ui/Glass";
+import { AmbientBackground, Eyebrow, Glass } from "@/components/ui/Glass";
 import { TapRow } from "@/components/ui/TapRow";
 import { SegmentBar } from "@/components/today/SegmentBar";
-import { SwipeableCard } from "@/components/today/SwipeableCard";
+import { BenTab } from "@/components/journey/BenTab";
 import { useAuth } from "@/context/AuthContext";
 import { useMode } from "@/context/ModeContext";
 import {
@@ -18,15 +28,24 @@ import {
   fetchPlans,
   fetchTodayAlignment,
   recordWaveSurvived,
-  revisePlan,
 } from "@/lib/api/yuvmi";
 import type { AlignmentResponse, FutureSelfResponse, GoalResponse, PlanResponse } from "@/lib/api/types";
-import { loadWaves, saveWaves, type WaveItem } from "@/lib/local";
+import {
+  loadSelfProfile,
+  loadWaves,
+  saveWaves,
+  type SelfProfile,
+  type WaveItem,
+} from "@/lib/local";
 import { shortStamp } from "@/lib/formatDate";
 import { alert } from "@/lib/alert";
 import { theme } from "@/theme";
 
-const JSEGS = ["Plan", "Plan sağlığı", "Geçmiş"] as const;
+/** Geçmiş · Ben · Gelecek — soldan sağa bir zaman ekseni, ortası kullanıcının kendisi. */
+const JSEGS = ["Geçmiş", "Ben", "Gelecek"] as const;
+
+/** Uygulama Yolculuk'ta açılıyor (app/index.tsx) ve ortadaki Ben sekmesinde başlıyor. */
+const SEG_BEN = 1;
 
 const PLAN_STATUS_LABEL: Record<string, string> = {
   active: "Aktif",
@@ -48,15 +67,20 @@ function healthCopy(alignment: AlignmentResponse | null) {
 }
 
 export default function JourneyScreen() {
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const pagerRef = useRef<ScrollView>(null);
+  const didInitPager = useRef(false);
   const { user } = useAuth();
-  const { prefs, patchPrefs } = useMode();
-  const [seg, setSeg] = useState(0);
+  const { patchPrefs } = useMode();
+  const [seg, setSeg] = useState(SEG_BEN);
   const [goal, setGoal] = useState<GoalResponse | null>(null);
   const [plan, setPlan] = useState<PlanResponse | null>(null);
   const [plans, setPlans] = useState<PlanResponse[]>([]);
   const [alignment, setAlignment] = useState<AlignmentResponse | null>(null);
   const [futureSelf, setFutureSelf] = useState<FutureSelfResponse | null>(null);
   const [waves, setWaves] = useState<WaveItem[]>([]);
+  const [self, setSelf] = useState<SelfProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [bubbleOpen, setBubbleOpen] = useState(false);
   const [adaptiveDone, setAdaptiveDone] = useState(false);
@@ -64,7 +88,10 @@ export default function JourneyScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (!user?.token) return;
+      if (!user?.token) {
+        setLoading(false);
+        return;
+      }
       void Promise.allSettled([
         fetchActiveGoal(),
         fetchActivePlan(),
@@ -72,23 +99,30 @@ export default function JourneyScreen() {
         fetchTodayAlignment(),
         fetchFutureSelf(),
         loadWaves(),
-      ]).then(([g, p, pl, a, fs, w]) => {
+        loadSelfProfile(),
+      ]).then(([g, p, pl, a, fs, w, sp]) => {
         setGoal(g.status === "fulfilled" ? g.value : null);
         setPlan(p.status === "fulfilled" ? p.value : null);
         setPlans(pl.status === "fulfilled" ? pl.value : []);
         setAlignment(a.status === "fulfilled" ? a.value : null);
         setFutureSelf(fs.status === "fulfilled" ? fs.value : null);
         setWaves(w.status === "fulfilled" ? w.value : []);
+        setSelf(sp.status === "fulfilled" ? sp.value : { motto: "", bubbles: [] });
         setLoading(false);
       });
     }, [user?.token]),
   );
 
-  if (loading) return <LoadingScreen />;
+  const go = (i: number) => {
+    const next = Math.max(0, Math.min(JSEGS.length - 1, i));
+    setSeg(next);
+    pagerRef.current?.scrollTo({ x: next * width, animated: true });
+  };
 
-  const steps = plan?.steps ?? [];
-  const health = healthCopy(alignment);
-  const quote = futureSelf?.description || futureSelf?.title || "Vizyon cümlen burada görünecek.";
+  const onPagerScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const i = Math.round(e.nativeEvent.contentOffset.x / Math.max(width, 1));
+    if (i !== seg && i >= 0 && i < JSEGS.length) setSeg(i);
+  };
 
   async function bumpWave(id: string) {
     const next = waves.map((w) => (w.id === id ? { ...w, count: w.count + 1 } : w));
@@ -128,48 +162,49 @@ export default function JourneyScreen() {
     await saveWaves(next);
   }
 
-  async function handleDeleteStep(stepId: string) {
-    if (!user?.token || !plan) return;
-    try {
-      const updatedSteps = plan.steps
-        .filter((s) => s.id !== stepId)
-        .map((s, i) => ({
-          dayOffset: s.dayOffset,
-          title: s.title,
-          description: s.description,
-          sortOrder: i,
-        }));
-      const revised = await revisePlan({ basePlanId: plan.id, steps: updatedSteps, activate: true });
-      setPlan(revised);
-    } catch (e) {
-      alert("Hata", "Adım silinemedi.");
-    }
-  }
+  if (loading) return <LoadingScreen />;
+
+  const health = healthCopy(alignment);
+  const quote = futureSelf?.description || futureSelf?.title || "Vizyon cümlen burada görünecek.";
+  const paneBottom = 120 + insets.bottom;
 
   return (
-    <Screen tabBar>
-      <PageHeader
-        eyebrow={goal?.title ?? "Yolculuk"}
-        eyebrowRight={plan ? `Plan v${plan.version}` : "Plan yok"}
-        title="Yolculuk"
-        subtitle="Vizyonun günlük hâli. Hayatın değiştikçe plan da değişir."
-      />
+    <View style={styles.root}>
+      <AmbientBackground />
+      <View style={[styles.head, { paddingTop: insets.top + 12 }]}>
+        <PageHeader
+          eyebrow={goal?.title ?? "Yolculuk"}
+          eyebrowRight={plan ? `Plan v${plan.version}` : "Plan yok"}
+          title="Yolculuk"
+          subtitle="Nereden geldin, kimsin, nereye gidiyorsun."
+        />
+        <SegmentBar index={seg} onChange={go} labels={JSEGS} style={{ marginTop: -4, marginBottom: 8 }} />
+      </View>
 
-      <SegmentBar index={seg} onChange={setSeg} labels={JSEGS} style={{ marginTop: -4, marginBottom: 8 }} />
-
-      {seg === 0 ? (
-        <>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={bubbleOpen ? "Vizyon cümlesini küçült" : "Vizyon cümlesini büyüt"}
-            onPress={() => setBubbleOpen((v) => !v)}
-          >
-            <Glass style={[styles.bubble, bubbleOpen && styles.bubbleExp]}>
-              <Text style={[styles.quote, bubbleOpen && styles.quoteExp]}>“{quote}”</Text>
-              <Text style={styles.hint}>{bubbleOpen ? "Küçültmek için dokun" : "Büyütmek için dokun"}</Text>
-            </Glass>
-          </Pressable>
-
+      <ScrollView
+        ref={pagerRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={onPagerScroll}
+        onLayout={() => {
+          if (didInitPager.current) return;
+          didInitPager.current = true;
+          pagerRef.current?.scrollTo({ x: SEG_BEN * width, animated: false });
+        }}
+        style={styles.pager}
+      >
+        <ScrollView
+          style={{ width }}
+          contentContainerStyle={[styles.pane, { paddingBottom: paneBottom }]}
+          showsVerticalScrollIndicator={false}
+        >
+          <Glass style={styles.stat}>
+            <Eyebrow style={styles.lbl}>Plan sağlığı</Eyebrow>
+            <Text style={styles.healthBig}>{health.title}</Text>
+            <Text style={styles.body}>{health.body}</Text>
+            <Text style={[styles.body, styles.forecast]}>{health.forecast}</Text>
+          </Glass>
 
           {!adaptiveDone ? (
             <Glass style={styles.banner}>
@@ -185,7 +220,7 @@ export default function JourneyScreen() {
                   style={styles.bsmY}
                   onPress={() => {
                     setAdaptiveDone(true);
-                    alert("Not alındı", "Gerçek sürümde plan v2 üretilir — geçmiş korunur.");
+                    alert("Not alındı", "Gerçek sürümde yeni plan üretilir — geçmiş korunur.");
                   }}
                 >
                   <Text style={styles.bsmYText}>Sabaha taşı</Text>
@@ -206,27 +241,39 @@ export default function JourneyScreen() {
             <EmptyState title="Aktif hedef yok" description="Onboarding'de bir hedef oluştur veya yeni hedef ekle." />
           ) : null}
 
-          <Eyebrow style={styles.sec}>Bugünün planı · {steps.length} adım</Eyebrow>
-          {steps.map((step, index) => (
-            <SwipeableCard key={step.id} label={step.title} onSwipe={() => void handleDeleteStep(step.id)}>
-              <TapRow
-                title={`${String(index + 1).padStart(2, "0")} · ${step.title}`}
-                subtitle={step.description || undefined}
-                arrow="›"
-                onPress={() => router.push(`/intention/new?stepId=${step.id}` as Href)}
-              />
-            </SwipeableCard>
-          ))}
+          <Glass style={styles.stat}>
+            <Eyebrow style={styles.lbl}>Plan evrimi</Eyebrow>
+            {(plans.length ? plans : plan ? [plan] : []).slice(0, 5).map((p) => (
+              <View key={p.id} style={styles.tlitem}>
+                <Text style={styles.tlv}>v{p.version}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.waveName}>{goal?.title ?? "Plan"}</Text>
+                  <Text style={styles.hint}>{shortStamp(p.createdAt)} · {PLAN_STATUS_LABEL[p.status] ?? p.status}</Text>
+                </View>
+              </View>
+            ))}
+            <Text style={styles.hint}>
+              {plans.length > 5
+                ? `+${plans.length - 5} eski sürüm daha — silinmez, sadece geçmişte kalır.`
+                : "Eski planlar silinmez — hayatındaki değişim versiyonlanır."}
+            </Text>
+          </Glass>
 
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Niyet ekle"
-            onPress={() => router.push("/intention/new" as Href)}
-            style={styles.add}
-          >
-            <Text style={styles.addText}>+ Niyet ekle</Text>
-          </Pressable>
+          <TapRow
+            title="Plan geçmişi"
+            subtitle={plan ? `v${plan.version} · ${shortStamp(plan.createdAt)}'te kuruldu` : "Henüz plan yok"}
+            onPress={() => router.push("/plan-history" as Href)}
+          />
+          <TapRow
+            title="Haftalık değerlendirme"
+            subtitle="Bu haftanın ritmi, örüntüler ve plan önerisi"
+            onPress={() => router.push("/weekly-review")}
+          />
 
+          {/* Dalgalar geçici olarak burada duruyor. "Bırakmak istediklerim" için
+              ayrı bir tasarım bekleniyor; o gelince blok olduğu gibi taşınacak.
+              Buraya park edilmesinin tek sebebi Plan sekmesi kalkarken
+              kullanıcının sayaçlarına erişimini kaybetmemesi. */}
           <Glass style={styles.stat}>
             <View style={styles.waveHeadRow}>
               <Eyebrow style={styles.lbl}>🌊 Dalgalar</Eyebrow>
@@ -267,64 +314,66 @@ export default function JourneyScreen() {
             </View>
             <Text style={styles.hint}>Gün saymıyoruz — atlattığın dalgaları sayıyoruz. Kayarsan hiçbir şey sıfırlanmaz.</Text>
           </Glass>
+        </ScrollView>
 
-        </>
-      ) : null}
+        <ScrollView
+          style={{ width }}
+          contentContainerStyle={[styles.pane, { paddingBottom: paneBottom }]}
+          showsVerticalScrollIndicator={false}
+        >
+          {self ? <BenTab displayName={user?.displayName ?? ""} profile={self} onChange={setSelf} /> : null}
+        </ScrollView>
 
-      {seg === 1 ? (
-        <>
-          <Glass style={styles.stat}>
-            <Eyebrow style={styles.lbl}>Plan sağlığı</Eyebrow>
-            <Text style={styles.healthBig}>{health.title}</Text>
-            <Text style={styles.body}>{health.body}</Text>
-            <Text style={[styles.body, styles.forecast]}>{health.forecast}</Text>
-          </Glass>
+        <ScrollView
+          style={{ width }}
+          contentContainerStyle={[styles.pane, { paddingBottom: paneBottom }]}
+          showsVerticalScrollIndicator={false}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={bubbleOpen ? "Vizyon cümlesini küçült" : "Vizyon cümlesini büyüt"}
+            onPress={() => setBubbleOpen((v) => !v)}
+          >
+            <Glass style={[styles.bubble, bubbleOpen && styles.bubbleExp]}>
+              <Eyebrow style={styles.lbl}>Gelecekteki ben</Eyebrow>
+              <Text style={[styles.quote, bubbleOpen && styles.quoteExp]}>“{quote}”</Text>
+              <Text style={styles.hint}>{bubbleOpen ? "Küçültmek için dokun" : "Büyütmek için dokun"}</Text>
+            </Glass>
+          </Pressable>
+
+          <Eyebrow style={styles.sec}>Canlandır</Eyebrow>
           <TapRow
-            title="Haftalık değerlendirme"
-            subtitle="Bu haftanın ritmi, örüntüler ve plan önerisi"
-            onPress={() => router.push("/weekly-review")}
+            title="🖼️ Vizyon panosu"
+            subtitle="Gelecekteki benliğini yansıtan pano duvarı"
+            onPress={() => router.push("/vision/board" as Href)}
           />
-        </>
-      ) : null}
-
-      {seg === 2 ? (
-        <>
-          <Glass style={styles.stat}>
-            <Eyebrow style={styles.lbl}>Plan evrimi</Eyebrow>
-            {(plans.length ? plans : plan ? [plan] : []).slice(0, 5).map((p) => (
-              <View key={p.id} style={styles.tlitem}>
-                <Text style={styles.tlv}>v{p.version}</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.waveName}>{goal?.title ?? "Plan"}</Text>
-                  <Text style={styles.hint}>{shortStamp(p.createdAt)} · {PLAN_STATUS_LABEL[p.status] ?? p.status}</Text>
-                </View>
-              </View>
-            ))}
-            <Text style={styles.hint}>
-              {plans.length > 5
-                ? `+${plans.length - 5} eski sürüm daha — silinmez, sadece geçmişte kalır.`
-                : "Eski planlar silinmez — hayatındaki değişim versiyonlanır."}
-            </Text>
-          </Glass>
           <TapRow
-            title="Plan geçmişi"
-            subtitle={plan ? `v${plan.version} · ${shortStamp(plan.createdAt)}'te kuruldu` : "Henüz plan yok"}
-            onPress={() => router.push("/plan-history" as Href)}
+            title="💬 Olumlamalar"
+            subtitle="Kendine söylediklerin"
+            onPress={() => router.push("/vision/affirmations" as Href)}
           />
-        </>
-      ) : null}
-    </Screen>
+          <TapRow
+            title="✉️ Mektup kutusu"
+            subtitle="Yaz, mühürle, gelecekteki bir tarihte aç"
+            onPress={() => router.push("/vision/letter" as Href)}
+          />
+        </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: theme.color.mist },
+  head: { paddingHorizontal: 18, zIndex: 2 },
+  pager: { flex: 1, zIndex: 1 },
+  pane: { paddingHorizontal: 18, paddingTop: 2 },
   bubble: { paddingVertical: 22, paddingHorizontal: 19, marginBottom: 11 },
   bubbleExp: { paddingVertical: 34, paddingHorizontal: 22 },
   quote: {
-    fontFamily: theme.font.sansBold,
+    fontFamily: theme.font.sans,
     fontSize: 17,
-    fontWeight: theme.font.weight.bold,
-    fontStyle: "italic",
+    fontWeight: theme.font.weight.regular,
     lineHeight: 24,
     color: theme.color.ink,
   },
@@ -353,23 +402,6 @@ const styles = StyleSheet.create({
   },
   bsmNText: { color: theme.color.ink70, fontFamily: theme.font.sansSemibold, fontWeight: theme.font.weight.semibold, fontSize: 12.5 },
   sec: { marginBottom: 9, marginTop: 4 },
-  add: {
-    marginTop: 4,
-    marginBottom: 12,
-    backgroundColor: "rgba(255,255,255,0.4)",
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderColor: theme.color.blueLight,
-    borderRadius: 14,
-    padding: 13,
-    alignItems: "center",
-  },
-  addText: {
-    fontFamily: theme.font.sansSemibold,
-    fontSize: 13.5,
-    fontWeight: theme.font.weight.semibold,
-    color: theme.color.blueDeep,
-  },
   stat: { padding: 14, marginBottom: 10 },
   lbl: { marginBottom: 8 },
   waveHeadRow: {
@@ -414,8 +446,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: theme.color.ink,
   },
-  tree: { fontFamily: theme.font.mono, fontSize: 11, color: theme.color.ink70, lineHeight: 18 },
-  treeB: { color: theme.color.ink, fontFamily: theme.font.sansBold, fontWeight: theme.font.weight.bold },
   healthBig: {
     fontFamily: theme.font.sansExtra,
     fontWeight: theme.font.weight.extra,
@@ -426,27 +456,4 @@ const styles = StyleSheet.create({
   },
   tlitem: { flexDirection: "row", gap: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "rgba(11,18,32,0.09)" },
   tlv: { fontFamily: theme.font.mono, fontSize: 11, color: theme.color.ink40, width: 48 },
-  visionTitle: {
-    fontFamily: theme.font.sansSemibold,
-    fontSize: 13.5,
-    color: theme.color.ink,
-    marginBottom: 8,
-  },
-  visionGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    marginVertical: 4,
-  },
-  visionDomain: {
-    backgroundColor: "rgba(37,99,235,0.12)",
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-  },
-  visionDomainText: {
-    fontFamily: theme.font.sansSemibold,
-    fontSize: 12,
-    color: theme.color.blueDeep,
-  },
 });

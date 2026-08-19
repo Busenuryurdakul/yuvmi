@@ -115,7 +115,6 @@ const styles = StyleSheet.create({
   },
   affirmation: {
     marginTop: theme.space.lg,
-    fontStyle: "italic",
     color: theme.color.text.primary,
   },
   actions: { marginTop: theme.space.xl, gap: theme.space.sm },

@@ -80,6 +80,18 @@ var planSuggestionSchema = map[string]any{
 	"additionalProperties": false,
 }
 
+var companionChatSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"reply": map[string]any{
+			"type":        "string",
+			"description": "Kullanıcıya Türkçe, 2-6 cümlelik yanıt. Eylem iddiası yok.",
+		},
+	},
+	"required":             []string{"reply"},
+	"additionalProperties": false,
+}
+
 // buildGoalContext renders the PII-safe profile summary for goal suggestions.
 //
 // The allow-list here is the privacy boundary required by PRD-AI 07: only the
@@ -133,6 +145,69 @@ func buildPlanContext(fs *fsmodel.FutureSelf, goal *goalmodel.Goal) string {
 	b.WriteString("\nBu hedefe göre 3-5 adet plan önerisi üret. ")
 	b.WriteString("Her planın 4 adımı olsun; adımlar günde 5-20 dakikada yapılabilecek somut eylemler olsun. ")
 	b.WriteString("dayOffset alanı 0'dan başlayarak sırayla artsın.")
+	return b.String()
+}
+
+type companionTurn struct {
+	Role string
+	Text string
+}
+
+func buildCompanionContext(
+	fs *fsmodel.FutureSelf,
+	goal *goalmodel.Goal,
+	recordBlock string,
+	history []companionTurn,
+	message string,
+) string {
+	var b strings.Builder
+	if fs != nil {
+		b.WriteString("Kullanıcının Gelecekteki Ben profili:\n")
+		b.WriteString(fmt.Sprintf("- Başlık: %s\n", sanitize(fs.Title, 200)))
+		if desc := sanitize(fs.Description, 1000); desc != "" {
+			b.WriteString(fmt.Sprintf("- Açıklama: %s\n", desc))
+		}
+		if len(fs.Domains) > 0 {
+			b.WriteString(fmt.Sprintf("- Yaşam alanları: %s\n", domainLabels(fs.Domains)))
+		}
+		if len(fs.Affirmations) > 0 {
+			if aff := sanitize(fs.Affirmations[0], 300); aff != "" {
+				b.WriteString(fmt.Sprintf("- Olumlama: %s\n", aff))
+			}
+		}
+		b.WriteString("\n")
+	}
+	if goal != nil {
+		b.WriteString("Aktif hedef:\n")
+		b.WriteString(fmt.Sprintf("- Başlık: %s\n", sanitize(goal.Title, 200)))
+		if desc := sanitize(goal.Description, 1000); desc != "" {
+			b.WriteString(fmt.Sprintf("- Açıklama: %s\n", desc))
+		}
+		b.WriteString("\n")
+	}
+
+	if recordBlock != "" {
+		b.WriteString(recordBlock)
+	}
+
+	b.WriteString("Görevin: Yuvmi sohbet sekreterisin. Kullanıcının kendi planına ve ritmine eşlik et.\n")
+	b.WriteString("Yalnızca yukarıdaki kayıtlara dayan. Olmayan sayıyı, günü veya niyeti uydurma.\n")
+	b.WriteString("İşaretleme, kaydetme veya plan değiştirme iddiasında bulunma — bu sohbet hiçbir şey yazmaz.\n")
+	b.WriteString("Tarih kehaneti yapma. Suçlama ve seri cezası dili kullanma. 2-6 cümle yaz.\n\n")
+
+	if len(history) > 0 {
+		b.WriteString("Önceki turlar:\n")
+		for _, turn := range history {
+			role := "Kullanıcı"
+			if turn.Role == "assistant" {
+				role = "Yuvmi"
+			}
+			b.WriteString(fmt.Sprintf("- %s: %s\n", role, sanitize(turn.Text, 400)))
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("Kullanıcının şimdi söylediği:\n")
+	b.WriteString(sanitize(message, 500))
 	return b.String()
 }
 

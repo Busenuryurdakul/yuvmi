@@ -10,6 +10,7 @@ import (
 	aiService "github.com/masterfabric-go/masterfabric/internal/domain/ai/service"
 	fsmodel "github.com/masterfabric-go/masterfabric/internal/domain/futureself/model"
 	goalmodel "github.com/masterfabric-go/masterfabric/internal/domain/goal/model"
+	profilemodel "github.com/masterfabric-go/masterfabric/internal/domain/profile/model"
 	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
 )
 
@@ -191,6 +192,49 @@ func (f *fakeGoals) GetLatestByUserID(context.Context, uuid.UUID) (*goalmodel.Go
 		return nil, domainErr.New(domainErr.ErrNotFound, "goal not found", nil)
 	}
 	return f.goal, nil
+}
+
+type fakePlans struct {
+	plan *goalmodel.Plan
+}
+
+func (f *fakePlans) GetActiveByUserID(context.Context, uuid.UUID) (*goalmodel.Plan, error) {
+	if f.plan == nil {
+		return nil, domainErr.New(domainErr.ErrNotFound, "plan not found", nil)
+	}
+	return f.plan, nil
+}
+
+type fakeTasks struct {
+	today  *goalmodel.DailyTask
+	recent []*goalmodel.DailyTask
+}
+
+func (f *fakeTasks) GetByDate(context.Context, uuid.UUID, time.Time) (*goalmodel.DailyTask, error) {
+	if f.today == nil {
+		return nil, domainErr.New(domainErr.ErrNotFound, "task not found", nil)
+	}
+	return f.today, nil
+}
+
+func (f *fakeTasks) ListRecent(context.Context, uuid.UUID, time.Time) ([]*goalmodel.DailyTask, error) {
+	return f.recent, nil
+}
+
+type fakeCheckins struct {
+	today *profilemodel.TodayEntry
+	since []*profilemodel.TodayEntry
+}
+
+func (f *fakeCheckins) GetByDate(context.Context, uuid.UUID, time.Time) (*profilemodel.TodayEntry, error) {
+	if f.today == nil {
+		return nil, domainErr.New(domainErr.ErrNotFound, "checkin not found", nil)
+	}
+	return f.today, nil
+}
+
+func (f *fakeCheckins) ListSince(context.Context, uuid.UUID, time.Time) ([]*profilemodel.TodayEntry, error) {
+	return f.since, nil
 }
 
 // fakeProvider records the request it was handed so tests can assert on the

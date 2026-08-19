@@ -73,6 +73,20 @@ func (h *Handler) PlanSuggestions(w http.ResponseWriter, r *http.Request) {
 	respond(w, data, err)
 }
 
+func (h *Handler) CompanionChat(w http.ResponseWriter, r *http.Request) {
+	userID, ok := requireUserID(w, r)
+	if !ok {
+		return
+	}
+	var req dto.CompanionChatRequest
+	if err := decodeAndValidate(r, &req); err != nil {
+		response.YuvmiFail(w, err)
+		return
+	}
+	data, err := h.svc.CompanionChat(r.Context(), userID, req.Message, req.History)
+	respond(w, data, err)
+}
+
 func (h *Handler) GetJob(w http.ResponseWriter, r *http.Request) {
 	userID, ok := requireUserID(w, r)
 	if !ok {

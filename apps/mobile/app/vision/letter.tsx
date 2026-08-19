@@ -1,11 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View, ScrollView, Animated } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { Screen } from "@/components/ui/Screen";
 import { SubpageBar } from "@/components/ui/SubpageBar";
 import { Eyebrow, Glass } from "@/components/ui/Glass";
 import { useMode } from "@/context/ModeContext";
-import { spendPearls } from "@/lib/api/yuvmi";
+import { spendPearls, fetchPlans, fetchAlignmentHistory } from "@/lib/api/yuvmi";
+import { loadMoodHistory, loadShopInventory } from "@/lib/local";
+import { toDateKey } from "@/lib/formatDate";
 import { alert } from "@/lib/alert";
 import { theme } from "@/theme";
 
@@ -14,8 +16,9 @@ type Letter = {
   title: string;
   body: string;
   seal: { emoji: string; label: string; color: string };
-  date: string; // Sealing date
-  targetDate: string; // Opening date
+  date: string;
+  targetDate: string;
+  writtenAt: string;
   status: "playable" | "locked" | "opened";
   daysLeft?: number;
   totalDays?: number;
@@ -37,6 +40,7 @@ const INITIAL_LETTERS: Letter[] = [
     seal: SEALS[0],
     date: "2 Haziran 2026",
     targetDate: "2 Temmuz 2026",
+    writtenAt: "2026-06-02T12:00:00.000Z",
     status: "playable",
     daysLeft: 0,
     totalDays: 30,
@@ -49,6 +53,7 @@ const INITIAL_LETTERS: Letter[] = [
     seal: SEALS[1],
     date: "13 Ağustos 2026",
     targetDate: "13 Ağustos 2027",
+    writtenAt: "2026-08-13T12:00:00.000Z",
     status: "locked",
     daysLeft: 365,
     totalDays: 365,
@@ -61,10 +66,11 @@ const INITIAL_LETTERS: Letter[] = [
     seal: SEALS[3],
     date: "2 Ağustos 2026",
     targetDate: "2 Eylül 2026",
+    writtenAt: "2026-08-02T12:00:00.000Z",
     status: "opened",
     daysLeft: 0,
     totalDays: 30,
-    mood: "İdare",
+    mood: "İyi",
   },
 ];
 
@@ -91,12 +97,34 @@ const formatTurkishDate = (date: Date) => {
   return `${day} ${month} ${year}`;
 };
 
+const MOOD_AT: Record<number, string> = {
+  1: "Yorgun",
+  2: "İdare",
+  3: "İyi",
+  4: "Canlı",
+};
+
+function daysSince(iso: string) {
+  const a = new Date(iso);
+  if (Number.isNaN(a.getTime())) return 0;
+  a.setHours(12, 0, 0, 0);
+  const b = new Date();
+  b.setHours(12, 0, 0, 0);
+  return Math.max(0, Math.round((b.getTime() - a.getTime()) / 86_400_000));
+}
+
+function comparisonLine(mood: string, days: number, slips: number, returns: number) {
+  const dayBit = days === 0 ? "bugün yazdın" : `${days} gün geçti`;
+  return `Bu mektubu yazdığın gün ruh hâlin "${mood}" idi. O günden bugüne ${dayBit}; ${slips} kez yoldan çıkıp ${returns} kez planına geri döndün.`;
+}
+
 export default function LetterScreen() {
   const { prefs, patchPrefs } = useMode();
   const tohum = prefs?.tohum ?? 48; // İnci balance
   const [view, setView] = useState<"list" | "write" | "read">("list");
   const [letters, setLetters] = useState<Letter[]>(INITIAL_LETTERS);
   const [selectedLetter, setSelectedLetter] = useState<Letter | null>(null);
+  const [sinceWrite, setSinceWrite] = useState({ days: 0, slips: 0, returns: 0 });
   const [listTab, setListTab] = useState<"locked" | "opened">("locked");
 
   // Write variables
@@ -104,6 +132,25 @@ export default function LetterScreen() {
   const [writeBody, setWriteBody] = useState("");
   const [writeOpenIn, setWriteOpenIn] = useState("1 yıl sonra");
   const [writeSeal, setWriteSeal] = useState(SEALS[0]);
+  const [shopSeals, setShopSeals] = useState<typeof SEALS>([]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadShopInventory().then((items) => {
+        setShopSeals(
+          items
+            .filter((item) => item.tab === "seal")
+            .map((item) => ({
+              emoji: item.emoji,
+              label: item.name,
+              color: "rgba(37,99,235,0.12)",
+            })),
+        );
+      });
+    }, []),
+  );
+
+  const allSeals = [...SEALS, ...shopSeals];
 
   // Sealing date variables
   const [openDateMode, setOpenDateMode] = useState<"preset" | "days" | "custom">("preset");
@@ -118,6 +165,27 @@ export default function LetterScreen() {
   const [isSealing, setIsSealing] = useState(false);
   const [sealAnim] = useState(() => new Animated.Value(0)); // 0 to 1
   const [bottleWobble] = useState(() => new Animated.Value(1)); // bottle scale
+
+  useEffect(() => {
+    if (view !== "read" || !selectedLetter) return;
+    const written = selectedLetter.writtenAt;
+    const days = daysSince(written);
+    const start = new Date(written).getTime();
+    setSinceWrite({ days, slips: 0, returns: 0 });
+    if (Number.isNaN(start)) return;
+    void Promise.allSettled([fetchPlans(), fetchAlignmentHistory()]).then(([pl, hist]) => {
+      const plans = pl.status === "fulfilled" ? pl.value : [];
+      const snaps = hist.status === "fulfilled" ? hist.value : [];
+      const returns = plans.filter(
+        (p) => p.status === "superseded" && new Date(p.createdAt).getTime() >= start,
+      ).length;
+      const slips = snaps.filter((s) => {
+        const t = new Date(s.date).getTime();
+        return t >= start && s.overallScore < 40;
+      }).length;
+      setSinceWrite({ days, slips, returns });
+    });
+  }, [view, selectedLetter]);
 
   function handleOpenLetter(letter: Letter) {
     if (letter.status === "locked") {
@@ -156,8 +224,6 @@ export default function LetterScreen() {
       );
     } else {
       if (letter.status === "playable") {
-        // First time opening, grant +2 İnci!
-        void patchPrefs({ tohum: tohum + 2 });
         const updated = letters.map((l) => (l.id === letter.id ? { ...l, status: "opened" as const } : l));
         setLetters(updated);
         setSelectedLetter({ ...letter, status: "opened" });
@@ -168,7 +234,7 @@ export default function LetterScreen() {
     }
   }
 
-  function handleSaveLetter() {
+  async function handleSaveLetter() {
     if (!writeTitle.trim() || !writeBody.trim()) {
       alert("Eksik", "Lütfen mektup başlığını ve içeriğini doldurun.");
       return;
@@ -202,6 +268,8 @@ export default function LetterScreen() {
 
     target.setHours(23, 59, 59, 999);
 
+    const todayMood = (await loadMoodHistory())[toDateKey(new Date())] ?? 0;
+
     const newLetter: Letter = {
       id: `${Date.now()}`,
       title: writeTitle.trim(),
@@ -209,10 +277,11 @@ export default function LetterScreen() {
       seal: writeSeal,
       date: formatTurkishDate(new Date()),
       targetDate: formatTurkishDate(target),
+      writtenAt: new Date().toISOString(),
       status: "locked",
       daysLeft: daysTotal,
       totalDays: daysTotal,
-      mood: "İyi",
+      mood: MOOD_AT[todayMood] ?? "İyi",
     };
 
     setLetters([newLetter, ...letters]);
@@ -478,7 +547,7 @@ export default function LetterScreen() {
             <Glass style={styles.sealCollection}>
               <Eyebrow style={styles.lbl}>MÜHÜR KOLEKSİYONUN</Eyebrow>
               <View style={styles.pills}>
-                {SEALS.map((s) => (
+                {allSeals.map((s) => (
                   <View key={s.label} style={styles.pill}>
                     <Text style={styles.pillText}>
                       {s.emoji} {s.label}
@@ -610,7 +679,7 @@ export default function LetterScreen() {
             <View style={styles.field}>
               <Eyebrow style={styles.lbl}>MÜHÜR SEÇİMİ</Eyebrow>
               <View style={styles.optionRow}>
-                {SEALS.map((s) => (
+                {allSeals.map((s) => (
                   <Pressable
                     key={s.label}
                     style={[styles.optBtn, writeSeal.label === s.label && styles.optBtnOn]}
@@ -649,7 +718,12 @@ export default function LetterScreen() {
             <Glass style={styles.comparisonCard}>
               <Eyebrow style={styles.lbl}>O GÜNDEN BUGÜNE</Eyebrow>
               <Text style={styles.comparisonBody}>
-                Bu mektubu yazdığın gün ruh hâlin &quot;{selectedLetter.mood}&quot; idi. O günden bugüne: 42 gün geçti, 2 kez yoldan çıkıp 2 kez planına geri döndün.
+                {comparisonLine(
+                  selectedLetter.mood,
+                  sinceWrite.days,
+                  sinceWrite.slips,
+                  sinceWrite.returns,
+                )}
               </Text>
             </Glass>
 
@@ -665,10 +739,6 @@ export default function LetterScreen() {
                 </View>
               </View>
             </Glass>
-
-            <View style={styles.toast}>
-              <Text style={styles.toastText}>+2 İnci 🫧 · mektup açıldı</Text>
-            </View>
 
             <Pressable style={styles.sealBtn} onPress={() => setView("list")}>
               <Text style={styles.sealBtnText}>Kutuya Geri Dön</Text>
@@ -987,19 +1057,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: theme.color.ink40,
     marginTop: 2,
-  },
-  toast: {
-    backgroundColor: "rgba(11,18,32,0.85)",
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    alignSelf: "center",
-    marginBottom: 10,
-  },
-  toastText: {
-    color: "#fff",
-    fontFamily: theme.font.mono,
-    fontSize: 12,
   },
   
   // Custom Styles Added

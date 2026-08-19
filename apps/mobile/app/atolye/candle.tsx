@@ -11,7 +11,7 @@ export default function CandleScreen() {
   const [intent, setIntent] = useState("");
   const [phase, setPhase] = useState<"idle" | "lit" | "done">("idle");
   const [left, setLeft] = useState(CANDLE_SECS);
-  const [shelf, setShelf] = useState<string[]>(["Sabırlı olacağım"]);
+  const [shelf, setShelf] = useState<string[]>([]);
   const [currentIntent, setCurrentIntent] = useState("");
   const [flicker] = useState(() => new Animated.Value(1));
   const [glow] = useState(() => new Animated.Value(0));
@@ -96,8 +96,8 @@ export default function CandleScreen() {
   });
 
   return (
-    <SubpageScreen title="Niyet mumu">
-      <Text style={styles.sub}>Bir niyet yaz, mumu yak. Yandığı sürece ekranda sadece o var.</Text>
+    <SubpageScreen title="Niyet feneri">
+      <Text style={styles.sub}>Bir niyet yaz, feneri yak. Yandığı sürece ekranda sadece o var.</Text>
 
       <Glass style={styles.center}>
         <Animated.View
@@ -114,7 +114,7 @@ export default function CandleScreen() {
         >
           <Animated.View style={[styles.glowCircle, { backgroundColor: glowColor }]} />
           <Text style={[styles.flame, phase === "idle" && styles.flameDim]}>
-            {phase === "lit" ? "🔥" : "🕯"}
+            {phase === "lit" ? "🏮" : "🏮"}
           </Text>
         </Animated.View>
 
@@ -123,7 +123,7 @@ export default function CandleScreen() {
         </Text>
 
         <Text style={styles.timer}>
-          {phase === "done" ? "mum söndü" : `${left} sn`}
+          {phase === "done" ? "fener söndü" : `${left} sn`}
         </Text>
       </Glass>
 
@@ -140,24 +140,26 @@ export default function CandleScreen() {
           </Glass>
           {/* Disabled rather than a silent no-op: `light()` returns early on an
               empty niyet, so the button used to look simply broken. */}
-          <Button label="Mumu yak" onPress={light} disabled={!intent.trim()} />
+          <Button label="Feneri yak" onPress={light} disabled={!intent.trim()} />
         </>
       ) : null}
 
       {phase === "done" ? (
-        <Button label="Yeni mum yak" variant="secondary" onPress={reset} style={{ marginTop: 12 }} />
+        <Button label="Yeni fener yak" variant="secondary" onPress={reset} style={{ marginTop: 12 }} />
       ) : null}
 
-      <Glass style={styles.shelfWrap}>
-        <Eyebrow>Yanan niyetlerin</Eyebrow>
-        <View style={styles.shelfRow}>
-          {shelf.map((s, i) => (
-            <View key={i} style={styles.pill}>
-              <Text style={styles.pillText}>🕯 {s}</Text>
-            </View>
-          ))}
-        </View>
-      </Glass>
+      {shelf.length > 0 ? (
+        <Glass style={styles.shelfWrap}>
+          <Eyebrow>Yanan niyetlerin</Eyebrow>
+          <View style={styles.shelfRow}>
+            {shelf.map((s, i) => (
+              <View key={i} style={styles.pill}>
+                <Text style={styles.pillText}>🏮 {s}</Text>
+              </View>
+            ))}
+          </View>
+        </Glass>
+      ) : null}
     </SubpageScreen>
   );
 }

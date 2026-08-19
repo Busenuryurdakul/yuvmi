@@ -305,6 +305,18 @@ export type PlanSuggestionsResponse = {
   jobId: string;
 };
 
+export type CompanionChatTurn = {
+  role: "user" | "assistant";
+  text: string;
+};
+
+export type CompanionChatResponse = {
+  reply: string;
+  jobId: string;
+  playbookId?: string;
+  playbookTitle?: string;
+};
+
 /** What the user did with a suggestion. Reported without knowing whether the
  *  ai_training_data scope is granted — the server decides whether there is
  *  anything to label, so the client never has to check first. */
