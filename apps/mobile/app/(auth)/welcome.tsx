@@ -71,6 +71,11 @@ export default function WelcomeScreen() {
       const message = result.message ?? "Giriş yapılamadı.";
       setError(message);
       showMessage("Giriş yapılamadı", message);
+    } else if (result.needsVerification) {
+      const message = result.message ?? "E-postandaki bağlantı ile hesabını doğrula.";
+      setError(null);
+      showMessage("E-posta doğrulama", message);
+      setMode("login");
     } else {
       router.replace("/");
     }

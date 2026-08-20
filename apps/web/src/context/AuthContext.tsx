@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { ApiError, bindAuthSession } from "@/lib/api/client";
-import { fetchMe, loginUser, refreshAuthToken, registerUser } from "@/lib/api/yuvmi";
+import { fetchMe, loginUser, logoutUser, refreshAuthToken, registerUser } from "@/lib/api/yuvmi";
 import { clearStoredSession, loadStoredSession, persistSession } from "@/lib/auth/session";
 import type { AuthUser } from "@/lib/auth/types";
 
@@ -23,7 +23,7 @@ type AuthContextValue = {
     firstName?: string;
     lastName?: string;
     mode: "login" | "register";
-  }) => Promise<{ ok: boolean; message?: string }>;
+  }) => Promise<{ ok: boolean; message?: string; needsVerification?: boolean }>;
   refreshProfile: () => Promise<void>;
   markOnboardingComplete: () => void;
   signOut: () => void;
@@ -33,7 +33,7 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 function toAuthUser(
-  login: { token: string; refresh_token: string },
+  login: { token?: string; refresh_token?: string },
   profile: Awaited<ReturnType<typeof fetchMe>>,
   displayName: string,
 ): AuthUser {
@@ -42,7 +42,7 @@ function toAuthUser(
     email: profile.email,
     displayName: profile.displayName || displayName,
     provider: "email",
-    token: login.token,
+    token: login.token ?? "",
     refreshToken: login.refresh_token,
     onboardingComplete: profile.onboardingComplete,
   };
@@ -74,36 +74,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     (async () => {
       const session = loadStoredSession();
-      if (!session?.token) {
-        if (mounted) setIsLoading(false);
-        return;
-      }
       try {
-        const profile = await fetchMe(session.token);
+        const profile = await fetchMe(session?.token ?? "");
         if (!mounted) return;
         const next = {
-          ...session,
           id: profile.id,
           email: profile.email,
-          displayName: profile.displayName || session.displayName,
+          displayName: profile.displayName || session?.displayName || "",
+          provider: "email" as const,
+          token: session?.token ?? "",
+          refreshToken: session?.refreshToken,
           onboardingComplete: profile.onboardingComplete,
         };
         persistSession(next);
         setUser(next);
       } catch {
-        if (session.refreshToken) {
-          try {
-            const refreshed = await refreshAuthToken(session.refreshToken);
-            const profile = await fetchMe(refreshed.token);
-            const next = toAuthUser(refreshed, profile, session.displayName);
-            persistSession(next);
-            if (mounted) setUser(next);
-            return;
-          } catch {
-            // fall through
-          }
+        try {
+          const refreshed = await refreshAuthToken(session?.refreshToken ?? "");
+          const profile = await fetchMe(refreshed.token ?? "");
+          const next = toAuthUser(refreshed, profile, session?.displayName || "");
+          persistSession(next);
+          if (mounted) setUser(next);
+          return;
+        } catch {
+          clearStoredSession();
         }
-        clearStoredSession();
       } finally {
         if (mounted) setIsLoading(false);
       }
@@ -142,16 +137,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           }
         }
-        const login = await loginUser(input.email, input.password);
-        const profile = await fetchMe(login.token);
-        completeSignIn(
-          toAuthUser(
-            login,
-            profile,
-            `${input.firstName ?? "Yuvmi"} ${input.lastName ?? ""}`.trim(),
-          ),
-        );
-        return { ok: true };
+        try {
+          const login = await loginUser(input.email, input.password);
+          const profile = await fetchMe(login.token ?? "");
+          completeSignIn(
+            toAuthUser(
+              login,
+              profile,
+              `${input.firstName ?? "Yuvmi"} ${input.lastName ?? ""}`.trim(),
+            ),
+          );
+          return { ok: true };
+        } catch (error) {
+          if (error instanceof ApiError && error.code === 403 && /email not verified/i.test(error.message)) {
+            return {
+              ok: true,
+              needsVerification: true,
+              message: "Kayıt alındı. E-postandaki bağlantı ile hesabını doğrula, sonra giriş yap.",
+            };
+          }
+          throw error;
+        }
       } catch (error) {
         const message = error instanceof ApiError ? error.message : "Giriş başarısız.";
         return { ok: false, message };
@@ -180,6 +186,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   const signOut = useCallback(() => {
+    void logoutUser().catch(() => undefined);
     clearStoredSession();
     setUser(null);
   }, []);

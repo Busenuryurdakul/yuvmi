@@ -73,7 +73,7 @@ func (v *OAuthVerifier) VerifyGoogleIDToken(ctx context.Context, idToken string)
 	}
 
 	email, _ := claims["email"].(string)
-	verified, _ := claims["email_verified"].(bool)
+	verified := claimBool(claims["email_verified"])
 	name, _ := claims["name"].(string)
 	parts := strings.Fields(name)
 
@@ -111,10 +111,14 @@ func (v *OAuthVerifier) VerifyAppleIdentityToken(ctx context.Context, identityTo
 	}
 
 	email, _ := claims["email"].(string)
+	verified := claimBool(claims["email_verified"])
+	if email != "" && claims["email_verified"] == nil {
+		verified = true
+	}
 	return &OAuthClaims{
 		Subject:       sub,
 		Email:         email,
-		EmailVerified: true,
+		EmailVerified: verified,
 		FirstName:     "Yuvmi",
 		LastName:      "Kullanıcı",
 	}, nil
@@ -272,4 +276,15 @@ func restOr(parts []string, fallback string) string {
 		return strings.Join(parts[1:], " ")
 	}
 	return fallback
+}
+
+func claimBool(v interface{}) bool {
+	switch t := v.(type) {
+	case bool:
+		return t
+	case string:
+		return strings.EqualFold(t, "true") || t == "1"
+	default:
+		return false
+	}
 }

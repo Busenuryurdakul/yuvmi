@@ -45,7 +45,7 @@ type AuthContextValue = {
     firstName?: string;
     lastName?: string;
     mode: "login" | "register";
-  }) => Promise<{ ok: boolean; message?: string }>;
+  }) => Promise<{ ok: boolean; message?: string; needsVerification?: boolean }>;
   signInWithGoogle: () => Promise<{ ok: boolean; message?: string }>;
   signInWithApple: () => Promise<{ ok: boolean; message?: string }>;
   refreshProfile: () => Promise<void>;
@@ -184,17 +184,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           }
         }
-        const login = await loginUser(input.email, input.password);
-        const profile = await fetchMe(login.token);
-        await completeSignIn(
-          toAuthUser(
-            login,
-            profile,
-            "email",
-            `${input.firstName ?? "Yuvmi"} ${input.lastName ?? ""}`.trim(),
-          ),
-        );
-        return { ok: true };
+        try {
+          const login = await loginUser(input.email, input.password);
+          const profile = await fetchMe(login.token);
+          await completeSignIn(
+            toAuthUser(
+              login,
+              profile,
+              "email",
+              `${input.firstName ?? "Yuvmi"} ${input.lastName ?? ""}`.trim(),
+            ),
+          );
+          return { ok: true };
+        } catch (error) {
+          if (error instanceof ApiError && error.code === 403 && /email not verified/i.test(error.message)) {
+            return {
+              ok: true,
+              needsVerification: true,
+              message: "Kayıt alındı. E-postandaki bağlantı ile hesabını doğrula, sonra giriş yap.",
+            };
+          }
+          throw error;
+        }
       } catch (error) {
         const message = error instanceof ApiError ? error.message : "Giriş başarısız.";
         return { ok: false, message };

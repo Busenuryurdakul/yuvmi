@@ -11,7 +11,8 @@ import (
 
 // Config holds all application configuration.
 type Config struct {
-	Server    ServerConfig
+	Environment string
+	Server      ServerConfig
 	Database  DatabaseConfig
 	Redis     RedisConfig
 	JWT       JWTConfig
@@ -42,7 +43,21 @@ type ServerConfig struct {
 	WriteTimeout      time.Duration
 	IdleTimeout       time.Duration
 	CORSAllowedOrigins []string
-	MaxBodyBytes      int64
+	MaxBodyBytes       int64
+	// AuthCookieSecure overrides the production default. nil means "true in
+	// production, and true when SameSite=None (required by browsers)".
+	AuthCookieSecure   *bool
+	AuthCookieSameSite string
+	AuthCookieDomain   string
+}
+
+// IsProduction reports whether APP_ENV is production/prod.
+func (c *Config) IsProduction() bool {
+	if c == nil {
+		return false
+	}
+	env := strings.ToLower(strings.TrimSpace(c.Environment))
+	return env == "production" || env == "prod"
 }
 
 // DatabaseConfig holds PostgreSQL connection settings.
@@ -155,6 +170,7 @@ type LogConfig struct {
 // Load reads configuration from environment variables with sensible defaults.
 func Load() *Config {
 	return &Config{
+		Environment: envOrDefault("APP_ENV", "development"),
 		Server: ServerConfig{
 			Host:               envOrDefault("SERVER_HOST", "0.0.0.0"),
 			Port:               envOrDefaultInt("SERVER_PORT", 8080),
@@ -163,6 +179,9 @@ func Load() *Config {
 			IdleTimeout:        time.Duration(envOrDefaultInt("SERVER_IDLE_TIMEOUT_SECONDS", 60)) * time.Second,
 			CORSAllowedOrigins: envOrDefaultSlice("CORS_ALLOWED_ORIGINS", nil),
 			MaxBodyBytes:       envOrDefaultInt64("MAX_BODY_BYTES", 1<<20),
+			AuthCookieSecure:   envBoolPtr("AUTH_COOKIE_SECURE"),
+			AuthCookieSameSite: envOrDefault("AUTH_COOKIE_SAMESITE", "none"),
+			AuthCookieDomain:   envOrDefault("AUTH_COOKIE_DOMAIN", ""),
 		},
 		Database: DatabaseConfig{
 			Host:     envOrDefault("DB_HOST", "localhost"),
@@ -272,6 +291,15 @@ func envOrDefaultInt64(key string, defaultVal int64) int64 {
 		}
 	}
 	return defaultVal
+}
+
+func envBoolPtr(key string) *bool {
+	val := strings.TrimSpace(os.Getenv(key))
+	if val == "" {
+		return nil
+	}
+	on := val == "1" || strings.EqualFold(val, "true")
+	return &on
 }
 
 func envOrDefaultSlice(key string, defaultVal []string) []string {

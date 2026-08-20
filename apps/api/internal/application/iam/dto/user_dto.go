@@ -22,8 +22,8 @@ type LoginRequest struct {
 
 // LoginResponse is the output for successful login.
 type LoginResponse struct {
-	Token        string   `json:"token"`
-	RefreshToken string   `json:"refresh_token"`
+	Token        string   `json:"token,omitempty"`
+	RefreshToken string   `json:"refresh_token,omitempty"`
 	User         UserInfo `json:"user"`
 }
 
@@ -32,15 +32,26 @@ type AuthTokenResponse = LoginResponse
 
 // OAuthRequest is the input for OAuth login.
 type OAuthRequest struct {
-	Provider   string `json:"provider" validate:"required,oneof=google apple"`
-	IDToken    string `json:"id_token" validate:"required"`
-	FirstName  string `json:"first_name"`
-	LastName   string `json:"last_name"`
+	Provider  string `json:"provider" validate:"required,oneof=google apple"`
+	IDToken   string `json:"id_token" validate:"required"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
 }
 
-// RefreshRequest is the input for token refresh.
+// RefreshRequest is the input for token refresh. The token may also arrive
+// via the HttpOnly refresh cookie; the body field is then optional.
 type RefreshRequest struct {
-	RefreshToken string `json:"refresh_token" validate:"required"`
+	RefreshToken string `json:"refresh_token"`
+}
+
+// VerifyEmailRequest completes email verification.
+type VerifyEmailRequest struct {
+	Token string `json:"token" validate:"required"`
+}
+
+// ResendVerificationRequest sends a new email verification link.
+type ResendVerificationRequest struct {
+	Email string `json:"email" validate:"required,email"`
 }
 
 // ForgotPasswordRequest starts a password reset flow.
@@ -61,12 +72,13 @@ type DeleteAccountRequest struct {
 
 // UserInfo is a public user representation.
 type UserInfo struct {
-	ID        uuid.UUID `json:"id"`
-	Email     string    `json:"email"`
-	FirstName string    `json:"first_name"`
-	LastName  string    `json:"last_name"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"created_at"`
+	ID            uuid.UUID `json:"id"`
+	Email         string    `json:"email"`
+	FirstName     string    `json:"first_name"`
+	LastName      string    `json:"last_name"`
+	EmailVerified bool      `json:"email_verified"`
+	Status        string    `json:"status"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 // AssignRoleRequest is the input for assigning a role to a user.

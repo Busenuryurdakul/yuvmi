@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"strings"
 
 	"github.com/masterfabric-go/masterfabric/internal/application/iam/dto"
 	"github.com/masterfabric-go/masterfabric/internal/domain/iam/repository"
@@ -34,7 +35,7 @@ func (uc *LoginUseCase) Execute(ctx context.Context, req dto.LoginRequest) (*dto
 		return nil, domainErr.New(domainErr.ErrForbidden, "dev auth bridge is disabled", nil)
 	}
 
-	user, err := uc.userRepo.GetByEmail(ctx, req.Email)
+	user, err := uc.userRepo.GetByEmail(ctx, strings.ToLower(strings.TrimSpace(req.Email)))
 	if err != nil {
 		return nil, domainErr.New(domainErr.ErrUnauthorized, "invalid credentials", nil)
 	}
@@ -49,6 +50,10 @@ func (uc *LoginUseCase) Execute(ctx context.Context, req dto.LoginRequest) (*dto
 
 	if err := uc.auth.VerifyPassword(user.PasswordHash, req.Password); err != nil {
 		return nil, err
+	}
+
+	if !user.EmailVerified {
+		return nil, domainErr.New(domainErr.ErrForbidden, "email not verified", nil)
 	}
 
 	return uc.issuer.Issue(ctx, user)

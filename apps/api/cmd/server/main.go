@@ -243,6 +243,7 @@ func buildDependencies(
 	userRepo := pgIam.NewUserRepo(db)
 	refreshTokenRepo := pgIam.NewRefreshTokenRepo(db)
 	passwordResetRepo := pgIam.NewPasswordResetRepo(db)
+	emailVerificationRepo := pgIam.NewEmailVerificationRepo(db)
 	roleRepo := pgIam.NewRoleRepo(db)
 	orgRepo := pgTenant.NewOrgRepo(db)
 	workspaceRepo := pgTenant.NewWorkspaceRepository(db)
@@ -265,14 +266,16 @@ func buildDependencies(
 	tokenIssuer := iamUC.NewTokenIssuer(jwtService, jwtService.RefreshExpiration(), refreshTokenRepo)
 
 	// --- Use cases (with event bus for domain event publishing) ---
-	registerUC := iamUC.NewRegisterUseCase(userRepo, jwtService, eventBus, cfg.Yuvmi)
+	registerUC := iamUC.NewRegisterUseCase(userRepo, jwtService, eventBus, emailVerificationRepo, cfg.Yuvmi, cfg.SMTP, log, cfg.IsProduction())
 	loginUC := iamUC.NewLoginUseCase(userRepo, jwtService, tokenIssuer, cfg.Yuvmi)
-	oauthUC := iamUC.NewOAuthLoginUseCase(userRepo, oauthVerifier, tokenIssuer)
+	oauthUC := iamUC.NewOAuthLoginUseCase(userRepo, oauthVerifier, tokenIssuer, refreshTokenRepo)
 	refreshUC := iamUC.NewRefreshTokenUseCase(userRepo, jwtService, refreshTokenRepo, tokenIssuer)
 	forgotPasswordUC := iamUC.NewForgotPasswordUseCase(userRepo, jwtService, passwordResetRepo, cfg.Yuvmi, cfg.SMTP, log)
 	resetPasswordUC := iamUC.NewResetPasswordUseCase(userRepo, jwtService, passwordResetRepo, refreshTokenRepo)
 	deleteAccountUC := iamUC.NewDeleteAccountUseCase(userRepo, jwtService, refreshTokenRepo)
 	assignRoleUC := iamUC.NewAssignRoleUseCase(roleRepo, rbacService, eventBus)
+	verifyEmailUC := iamUC.NewVerifyEmailUseCase(userRepo, jwtService, emailVerificationRepo)
+	resendVerifyUC := iamUC.NewResendVerificationUseCase(userRepo, jwtService, emailVerificationRepo, cfg.Yuvmi, cfg.SMTP, log)
 	createOrgUC := tenantUC.NewCreateOrgUseCase(orgRepo, eventBus)
 	createWorkspaceUC := tenantUC.NewCreateWorkspaceUseCase(workspaceRepo, orgRepo, eventBus)
 	listWorkspacesUC := tenantUC.NewListWorkspacesUseCase(workspaceRepo)
@@ -305,7 +308,9 @@ func buildDependencies(
 	deps.IAMHandler = iamHandler.NewHandler(
 		registerUC, loginUC, oauthUC, refreshUC,
 		forgotPasswordUC, resetPasswordUC, deleteAccountUC,
-		assignRoleUC, userRepo,
+		assignRoleUC, verifyEmailUC, resendVerifyUC, userRepo, refreshTokenRepo, jwtService,
+		infraAuth.NewCookieConfig(cfg, jwtService.AccessExpiration(), jwtService.RefreshExpiration()),
+		cfg.Server.CORSAllowedOrigins,
 	)
 	deps.TenantHandler = tenantHandler.NewHandler(
 		createOrgUC,
