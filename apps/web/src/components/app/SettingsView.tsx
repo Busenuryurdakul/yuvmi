@@ -25,7 +25,7 @@ export function SettingsView() {
     setLoading(true);
     try {
       await deleteAccount(user.token, password || undefined);
-      signOut();
+      await signOut({ localOnly: true });
       router.replace(APP_LOGIN_PATH);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Hesap silinemedi.");

@@ -272,6 +272,7 @@ func buildDependencies(
 	forgotPasswordUC := iamUC.NewForgotPasswordUseCase(userRepo, jwtService, passwordResetRepo, cfg.Yuvmi, cfg.SMTP, log)
 	resetPasswordUC := iamUC.NewResetPasswordUseCase(userRepo, jwtService, passwordResetRepo, refreshTokenRepo)
 	deleteAccountUC := iamUC.NewDeleteAccountUseCase(userRepo, jwtService, refreshTokenRepo)
+	logoutUC := iamUC.NewLogoutUseCase(jwtService, refreshTokenRepo)
 	assignRoleUC := iamUC.NewAssignRoleUseCase(roleRepo, rbacService, eventBus)
 	createOrgUC := tenantUC.NewCreateOrgUseCase(orgRepo, eventBus)
 	createWorkspaceUC := tenantUC.NewCreateWorkspaceUseCase(workspaceRepo, orgRepo, eventBus)
@@ -304,7 +305,7 @@ func buildDependencies(
 	// --- Handlers ---
 	deps.IAMHandler = iamHandler.NewHandler(
 		registerUC, loginUC, oauthUC, refreshUC,
-		forgotPasswordUC, resetPasswordUC, deleteAccountUC,
+		forgotPasswordUC, resetPasswordUC, deleteAccountUC, logoutUC,
 		assignRoleUC, userRepo,
 	)
 	deps.TenantHandler = tenantHandler.NewHandler(

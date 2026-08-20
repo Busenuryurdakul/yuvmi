@@ -24,6 +24,7 @@ type Handler struct {
 	forgotPasswordUC *usecase.ForgotPasswordUseCase
 	resetPasswordUC  *usecase.ResetPasswordUseCase
 	deleteAccountUC  *usecase.DeleteAccountUseCase
+	logoutUC         *usecase.LogoutUseCase
 	assignRoleUC     *usecase.AssignRoleUseCase
 	userRepo         iamRepo.UserRepository
 }
@@ -37,6 +38,7 @@ func NewHandler(
 	forgotPasswordUC *usecase.ForgotPasswordUseCase,
 	resetPasswordUC *usecase.ResetPasswordUseCase,
 	deleteAccountUC *usecase.DeleteAccountUseCase,
+	logoutUC *usecase.LogoutUseCase,
 	assignRoleUC *usecase.AssignRoleUseCase,
 	userRepo iamRepo.UserRepository,
 ) *Handler {
@@ -48,6 +50,7 @@ func NewHandler(
 		forgotPasswordUC: forgotPasswordUC,
 		resetPasswordUC:  resetPasswordUC,
 		deleteAccountUC:  deleteAccountUC,
+		logoutUC:         logoutUC,
 		assignRoleUC:     assignRoleUC,
 		userRepo:         userRepo,
 	}
@@ -165,6 +168,28 @@ func (h *Handler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 	_ = validator.DecodeAndValidate(r, &req)
 
 	if err := h.deleteAccountUC.Execute(r.Context(), userID, req); err != nil {
+		response.Error(w, err)
+		return
+	}
+
+	response.NoContent(w)
+}
+
+// Logout revokes the refresh token supplied by the authenticated user.
+func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		response.JSON(w, http.StatusUnauthorized, map[string]string{"error": "not authenticated"})
+		return
+	}
+
+	var req dto.LogoutRequest
+	if err := validator.DecodeAndValidate(r, &req); err != nil {
+		response.JSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if err := h.logoutUC.Execute(r.Context(), userID, req); err != nil {
 		response.Error(w, err)
 		return
 	}

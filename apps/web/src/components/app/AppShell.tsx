@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useState, type ReactNode } from "react";
 import { APP_NAME } from "@yuvmi/shared";
 import { YuvmiLogo } from "@/components/manifesto/variants/YuvmiLogo";
 import { useAuth } from "@/context/AuthContext";
 import { APP_LOGIN_PATH } from "@/lib/auth/app-route";
-import type { ReactNode } from "react";
 
 const NAV = [
   { href: "/app", label: "Bugün" },
@@ -23,10 +23,17 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, signOut } = useAuth();
+  const [signingOut, setSigningOut] = useState(false);
 
-  function handleSignOut() {
-    signOut();
-    router.replace(APP_LOGIN_PATH);
+  async function handleSignOut() {
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      await signOut();
+      router.replace(APP_LOGIN_PATH);
+    } finally {
+      setSigningOut(false);
+    }
   }
 
   return (
@@ -54,8 +61,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Link href="/app/settings" className="app-text-btn landing-focus-ring">
             Ayarlar
           </Link>
-          <button type="button" className="app-text-btn landing-focus-ring" onClick={handleSignOut}>
-            Çıkış
+          <button
+            type="button"
+            className="app-text-btn landing-focus-ring"
+            onClick={() => void handleSignOut()}
+            disabled={signingOut}
+          >
+            {signingOut ? "Çıkılıyor…" : "Çıkış"}
           </button>
         </div>
       </header>

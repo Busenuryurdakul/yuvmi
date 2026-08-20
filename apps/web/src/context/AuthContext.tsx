@@ -12,7 +12,8 @@ import {
 import { ApiError, bindAuthSession } from "@/lib/api/client";
 import { fetchMe, loginUser, refreshAuthToken, registerUser } from "@/lib/api/yuvmi";
 import { clearStoredSession, loadStoredSession, persistSession } from "@/lib/auth/session";
-import type { AuthUser } from "@/lib/auth/types";
+import { executeSignOut, type SignOutOptions } from "@/lib/auth/sign-out";
+import { AUTH_STORAGE_KEY, type AuthUser } from "@/lib/auth/types";
 
 type AuthContextValue = {
   user: AuthUser | null;
@@ -26,7 +27,7 @@ type AuthContextValue = {
   }) => Promise<{ ok: boolean; message?: string }>;
   refreshProfile: () => Promise<void>;
   markOnboardingComplete: () => void;
-  signOut: () => void;
+  signOut: (options?: SignOutOptions) => Promise<void>;
   updateTokens: (token: string, refreshToken: string) => void;
 };
 
@@ -68,6 +69,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     return () => bindAuthSession(null);
   }, [updateTokens]);
+
+  useEffect(() => {
+    function onStorage(event: StorageEvent) {
+      if (event.key !== AUTH_STORAGE_KEY) return;
+      if (event.newValue === null) {
+        setUser(null);
+        return;
+      }
+      if (!event.newValue) return;
+      try {
+        setUser(JSON.parse(event.newValue) as AuthUser);
+      } catch {
+        clearStoredSession();
+        setUser(null);
+      }
+    }
+
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -179,8 +200,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(next);
   }, [user]);
 
-  const signOut = useCallback(() => {
-    clearStoredSession();
+  const signOut = useCallback(async (options?: SignOutOptions) => {
+    const session = loadStoredSession();
+    await executeSignOut(session, options);
     setUser(null);
   }, []);
 

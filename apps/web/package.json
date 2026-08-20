@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test src/lib/auth/app-route.test.ts",
+    "test": "node --experimental-strip-types --test src/lib/auth/app-route.test.ts src/lib/auth/sign-out.test.ts src/lib/api/auth-refresh-policy.test.ts",
     "smoke:api": "node scripts/smoke-api-flow.mjs"
   },
   "dependencies": {

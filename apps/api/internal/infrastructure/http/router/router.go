@@ -126,6 +126,9 @@ func New(deps Dependencies) *chi.Mux {
 			if deps.AuthService != nil {
 				r.Use(middleware.JWTAuth(deps.AuthService))
 			}
+			if deps.IAMHandler != nil {
+				r.Post("/auth/logout", deps.IAMHandler.Logout)
+			}
 			if deps.YuvmiHandler != nil {
 				r.Get("/me", deps.YuvmiHandler.GetMe)
 				r.Patch("/me", deps.YuvmiHandler.UpdateMe)

@@ -65,6 +65,15 @@ export async function deleteAccount(token: string, password?: string) {
   });
 }
 
+export async function logoutUser(accessToken: string, refreshToken: string) {
+  return apiRequest<void>("/api/v1/auth/logout", {
+    method: "POST",
+    token: accessToken,
+    body: { refresh_token: refreshToken },
+    skipAuthRefresh: true,
+  });
+}
+
 export async function fetchMe(token: string) {
   return apiRequest<UserProfileResponse>("/api/v1/me", { token });
 }

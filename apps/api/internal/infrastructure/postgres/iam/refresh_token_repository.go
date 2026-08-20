@@ -48,6 +48,17 @@ func (r *RefreshTokenRepo) Revoke(ctx context.Context, tokenHash string) error {
 	return err
 }
 
+func (r *RefreshTokenRepo) RevokeForUser(ctx context.Context, userID uuid.UUID, tokenHash string) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE refresh_tokens SET revoked_at = NOW()
+		WHERE user_id = $1 AND token_hash = $2 AND revoked_at IS NULL`,
+		userID, tokenHash)
+	if err != nil {
+		return domainErr.New(domainErr.ErrInternal, "failed to revoke refresh token", err)
+	}
+	return nil
+}
+
 func (r *RefreshTokenRepo) RevokeAllForUser(ctx context.Context, userID uuid.UUID) error {
 	_, err := r.db.Exec(ctx, `
 		UPDATE refresh_tokens SET revoked_at = NOW()

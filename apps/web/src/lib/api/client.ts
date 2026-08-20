@@ -1,5 +1,6 @@
 import { getApiBaseUrl } from "./config";
 import type { LoginResponse } from "./types";
+import { shouldAttemptAuthRefresh } from "./auth-refresh-policy";
 
 export class ApiError extends Error {
   code: number;
@@ -27,6 +28,7 @@ type RequestOptions = {
   refreshToken?: string | null;
   body?: unknown;
   onTokenRefreshed?: (tokens: { token: string; refreshToken: string }) => void;
+  skipAuthRefresh?: boolean;
 };
 
 function parseApiError(payload: Record<string, unknown>, status: number): ApiError {
@@ -113,7 +115,7 @@ async function requestWithRefresh<T>(
   const payload = parsePayload(await response.text());
 
   const refreshToken = options.refreshToken ?? sessionBridge?.getRefreshToken();
-  if (response.status === 401 && !retried && refreshToken) {
+  if (shouldAttemptAuthRefresh(response.status, retried, options, refreshToken) && refreshToken) {
     try {
       const refreshed = await refreshSession(refreshToken);
       const tokens = { token: refreshed.token, refreshToken: refreshed.refresh_token };
@@ -135,6 +137,10 @@ async function requestWithRefresh<T>(
 
   if (!response.ok) {
     throw parseApiError(payload, response.status);
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
   }
 
   if ("data" in payload) {
