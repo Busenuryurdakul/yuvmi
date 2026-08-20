@@ -56,7 +56,7 @@ function parsePayload(text: string): Record<string, unknown> {
   }
 }
 
-async function refreshSession(refreshToken: string): Promise<LoginResponse> {
+async function refreshSession(refreshToken?: string): Promise<LoginResponse> {
   const baseUrl = getApiBaseUrl();
   if (baseUrl === null) {
     throw new ApiError("API adresi yapılandırılmamış (NEXT_PUBLIC_API_BASE_URL).", 0);
@@ -67,8 +67,10 @@ async function refreshSession(refreshToken: string): Promise<LoginResponse> {
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
+      "X-Yuvmi-Client": "web",
     },
-    body: JSON.stringify({ refresh_token: refreshToken }),
+    credentials: "include",
+    body: JSON.stringify(refreshToken ? { refresh_token: refreshToken } : {}),
   });
   const payload = parsePayload(await response.text());
   if (!response.ok) throw parseApiError(payload, response.status);
@@ -92,6 +94,7 @@ async function requestWithRefresh<T>(
 
   const headers: Record<string, string> = {
     Accept: "application/json",
+    "X-Yuvmi-Client": "web",
   };
 
   if (options.body !== undefined) {
@@ -105,6 +108,7 @@ async function requestWithRefresh<T>(
   const response = await fetch(`${baseUrl}${path}`, {
     method: options.method ?? (options.body !== undefined ? "POST" : "GET"),
     headers,
+    credentials: "include",
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
   }).catch(() => {
     throw new ApiError(`API'ye ulaşılamadı (${baseUrl}). Backend çalışıyor mu?`, 0);
@@ -113,18 +117,18 @@ async function requestWithRefresh<T>(
   const payload = parsePayload(await response.text());
 
   const refreshToken = options.refreshToken ?? sessionBridge?.getRefreshToken();
-  if (response.status === 401 && !retried && refreshToken) {
+  if (response.status === 401 && !retried) {
     try {
       const refreshed = await refreshSession(refreshToken);
-      const tokens = { token: refreshed.token, refreshToken: refreshed.refresh_token };
+      const tokens = { token: refreshed.token ?? "", refreshToken: refreshed.refresh_token ?? "" };
       options.onTokenRefreshed?.(tokens);
       sessionBridge?.onTokenRefreshed(tokens);
       return requestWithRefresh(
         path,
         {
           ...options,
-          token: refreshed.token,
-          refreshToken: refreshed.refresh_token,
+          token: refreshed.token || options.token,
+          refreshToken: refreshed.refresh_token || options.refreshToken,
         },
         true,
       );

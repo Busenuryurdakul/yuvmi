@@ -43,6 +43,7 @@ func (uc *ResetPasswordUseCase) Execute(ctx context.Context, req dto.ResetPasswo
 		return domainErr.New(domainErr.ErrInternal, "failed to hash password", err)
 	}
 	user.PasswordHash = hash
+	user.EmailVerified = true
 	if err := uc.userRepo.Update(ctx, user); err != nil {
 		return err
 	}

@@ -20,7 +20,7 @@ func CORSOptions(origins []string) cors.Options {
 	opts := cors.Options{
 		AllowedOrigins:   nil,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-ID", "X-Organization-ID", "X-App-ID"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-ID", "X-Organization-ID", "X-App-ID", "X-Yuvmi-Client"},
 		ExposedHeaders:   []string{"X-Request-ID"},
 		AllowCredentials: len(allowed) > 0,
 		MaxAge:           300,

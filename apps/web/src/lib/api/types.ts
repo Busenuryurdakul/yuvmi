@@ -1,13 +1,14 @@
 import type { LifeDomain } from "@yuvmi/shared";
 
 export type LoginResponse = {
-  token: string;
-  refresh_token: string;
+  token?: string;
+  refresh_token?: string;
   user: {
     id: string;
     email: string;
     first_name: string;
     last_name: string;
+    email_verified?: boolean;
     status: string;
     created_at: string;
   };

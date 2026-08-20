@@ -101,6 +101,9 @@ func New(deps Dependencies) *chi.Mux {
 				r.Post("/login", deps.IAMHandler.Login)
 				r.Post("/oauth", deps.IAMHandler.OAuthLogin)
 				r.Post("/refresh", deps.IAMHandler.RefreshToken)
+				r.Post("/logout", deps.IAMHandler.Logout)
+				r.Post("/verify-email", deps.IAMHandler.VerifyEmail)
+				r.Post("/resend-verification", deps.IAMHandler.ResendVerification)
 				r.Post("/forgot-password", deps.IAMHandler.ForgotPassword)
 				r.Post("/reset-password", deps.IAMHandler.ResetPassword)
 			}
@@ -124,7 +127,7 @@ func New(deps Dependencies) *chi.Mux {
 		// Yuvmi product routes (JWT only — no tenant/org headers required)
 		r.Group(func(r chi.Router) {
 			if deps.AuthService != nil {
-				r.Use(middleware.JWTAuth(deps.AuthService))
+				r.Use(middleware.JWTAuth(deps.AuthService, deps.CORSAllowedOrigins))
 			}
 			if deps.YuvmiHandler != nil {
 				r.Get("/me", deps.YuvmiHandler.GetMe)
@@ -221,7 +224,7 @@ func New(deps Dependencies) *chi.Mux {
 		// Protected routes (require JWT)
 		r.Group(func(r chi.Router) {
 			if deps.AuthService != nil {
-				r.Use(middleware.JWTAuth(deps.AuthService))
+				r.Use(middleware.JWTAuth(deps.AuthService, deps.CORSAllowedOrigins))
 			}
 
 			// Tenant resolution middleware (with workspace support)
@@ -238,7 +241,7 @@ func New(deps Dependencies) *chi.Mux {
 
 		r.Group(func(r chi.Router) {
 			if deps.AuthService != nil {
-				r.Use(middleware.JWTAuth(deps.AuthService))
+				r.Use(middleware.JWTAuth(deps.AuthService, deps.CORSAllowedOrigins))
 			}
 
 			if deps.OrgRepo != nil {

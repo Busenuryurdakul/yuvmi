@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log/slog"
-	"net/smtp"
 	"strings"
 	"time"
 
@@ -60,19 +59,16 @@ func (uc *ForgotPasswordUseCase) Execute(ctx context.Context, req dto.ForgotPass
 	}
 
 	resetURL := fmt.Sprintf("%s/reset-password?token=%s", strings.TrimRight(uc.cfg.AppBaseURL, "/"), token)
-	if uc.smtp.Host != "" {
-		_ = uc.sendEmail(user.Email, "Yuvmi şifre sıfırlama", fmt.Sprintf("Şifrenizi sıfırlamak için: %s\n\nBağlantı 1 saat geçerlidir.", resetURL))
-	} else if uc.cfg.LogPasswordReset && uc.log != nil {
-		uc.log.Info("password reset token (dev/staging)", "email", user.Email, "reset_url", resetURL)
-	}
+	deliverAuthEmail(
+		uc.smtp,
+		uc.log,
+		uc.cfg.LogPasswordReset,
+		user.Email,
+		"Yuvmi şifre sıfırlama",
+		fmt.Sprintf("Şifrenizi sıfırlamak için: %s\n\nBağlantı 1 saat geçerlidir.", resetURL),
+		resetURL,
+	)
 	return nil
-}
-
-func (uc *ForgotPasswordUseCase) sendEmail(to, subject, body string) error {
-	addr := fmt.Sprintf("%s:%d", uc.smtp.Host, uc.smtp.Port)
-	msg := []byte(fmt.Sprintf("To: %s\r\nSubject: %s\r\n\r\n%s", to, subject, body))
-	auth := smtp.PlainAuth("", uc.smtp.User, uc.smtp.Password, uc.smtp.Host)
-	return smtp.SendMail(addr, auth, uc.smtp.From, []string{to}, msg)
 }
 
 func generateResetToken() (string, error) {

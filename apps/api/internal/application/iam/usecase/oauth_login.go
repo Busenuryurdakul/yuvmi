@@ -9,22 +9,25 @@ import (
 	"github.com/masterfabric-go/masterfabric/internal/domain/iam/model"
 	"github.com/masterfabric-go/masterfabric/internal/domain/iam/repository"
 	infraAuth "github.com/masterfabric-go/masterfabric/internal/infrastructure/auth"
+	pgIam "github.com/masterfabric-go/masterfabric/internal/infrastructure/postgres/iam"
 	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
 )
 
 // OAuthLoginUseCase handles Google/Apple OAuth sign-in.
 type OAuthLoginUseCase struct {
-	userRepo repository.UserRepository
-	verifier *infraAuth.OAuthVerifier
-	issuer   *TokenIssuer
+	userRepo    repository.UserRepository
+	verifier    *infraAuth.OAuthVerifier
+	issuer      *TokenIssuer
+	refreshRepo *pgIam.RefreshTokenRepo
 }
 
 func NewOAuthLoginUseCase(
 	userRepo repository.UserRepository,
 	verifier *infraAuth.OAuthVerifier,
 	issuer *TokenIssuer,
+	refreshRepo *pgIam.RefreshTokenRepo,
 ) *OAuthLoginUseCase {
-	return &OAuthLoginUseCase{userRepo: userRepo, verifier: verifier, issuer: issuer}
+	return &OAuthLoginUseCase{userRepo: userRepo, verifier: verifier, issuer: issuer, refreshRepo: refreshRepo}
 }
 
 func (uc *OAuthLoginUseCase) Execute(ctx context.Context, req dto.OAuthRequest) (*dto.AuthTokenResponse, error) {
@@ -49,9 +52,9 @@ func (uc *OAuthLoginUseCase) Execute(ctx context.Context, req dto.OAuthRequest) 
 		if !errors.Is(err, domainErr.ErrNotFound) {
 			return nil, err
 		}
-		user = uc.findOrCreateUser(ctx, provider, claims, req)
-		if user == nil {
-			return nil, domainErr.New(domainErr.ErrInternal, "failed to create OAuth user", nil)
+		user, err = uc.findOrCreateUser(ctx, provider, claims, req)
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -62,15 +65,28 @@ func (uc *OAuthLoginUseCase) Execute(ctx context.Context, req dto.OAuthRequest) 
 	return uc.issuer.Issue(ctx, user)
 }
 
-func (uc *OAuthLoginUseCase) findOrCreateUser(ctx context.Context, provider string, claims *infraAuth.OAuthClaims, req dto.OAuthRequest) *model.User {
+func (uc *OAuthLoginUseCase) findOrCreateUser(ctx context.Context, provider string, claims *infraAuth.OAuthClaims, req dto.OAuthRequest) (*model.User, error) {
 	if claims.Email != "" {
-		if existing, err := uc.userRepo.GetByEmail(ctx, claims.Email); err == nil && existing != nil {
-			existing.AuthProvider = provider
-			existing.ProviderSubject = claims.Subject
-			if existing.PasswordHash == "" {
-				_ = uc.userRepo.Update(ctx, existing)
+		claims.Email = strings.ToLower(strings.TrimSpace(claims.Email))
+		if !claims.EmailVerified {
+			return nil, domainErr.New(domainErr.ErrUnauthorized, "OAuth email is not verified", nil)
+		}
+		existing, err := uc.userRepo.GetByEmail(ctx, claims.Email)
+		if err == nil && existing != nil {
+			takeover, err := applyOAuthLink(existing, provider, claims)
+			if err != nil {
+				return nil, err
 			}
-			return existing
+			if err := uc.userRepo.Update(ctx, existing); err != nil {
+				return nil, err
+			}
+			if takeover && uc.refreshRepo != nil {
+				_ = uc.refreshRepo.RevokeAllForUser(ctx, existing.ID)
+			}
+			return existing, nil
+		}
+		if err != nil && !errors.Is(err, domainErr.ErrNotFound) {
+			return nil, err
 		}
 	}
 
@@ -93,10 +109,28 @@ func (uc *OAuthLoginUseCase) findOrCreateUser(ctx context.Context, provider stri
 		LastName:        lastName,
 		AuthProvider:    provider,
 		ProviderSubject: claims.Subject,
+		EmailVerified:   claims.EmailVerified || claims.Email == "",
 		Status:          model.UserStatusActive,
 	}
 	if err := uc.userRepo.Create(ctx, user); err != nil {
-		return nil
+		return nil, err
 	}
-	return user
+	return user, nil
+}
+
+// applyOAuthLink attaches a verified OAuth identity to an existing email account.
+// Unverified password accounts are taken over (password cleared) so a squatted
+// email cannot keep access after the real owner proves it via Google/Apple.
+func applyOAuthLink(existing *model.User, provider string, claims *infraAuth.OAuthClaims) (takeover bool, err error) {
+	if claims == nil || !claims.EmailVerified {
+		return false, domainErr.New(domainErr.ErrUnauthorized, "OAuth email is not verified", nil)
+	}
+	existing.AuthProvider = provider
+	existing.ProviderSubject = claims.Subject
+	if existing.EmailVerified {
+		return false, nil
+	}
+	existing.EmailVerified = true
+	existing.PasswordHash = ""
+	return true, nil
 }

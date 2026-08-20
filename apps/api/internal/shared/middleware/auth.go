@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/google/uuid"
@@ -22,28 +23,34 @@ const (
 )
 
 // JWTAuth is middleware that validates JWT tokens and injects claims into context.
-func JWTAuth(authService service.AuthService) func(http.Handler) http.Handler {
+// Access tokens may come from Authorization: Bearer (mobile) or an HttpOnly cookie (web).
+// Cookie-authenticated mutating requests must present an Origin on the CORS allow-list.
+// A nil AuthService is treated as unauthenticated (fail closed).
+func JWTAuth(authService service.AuthService, allowedOrigins []string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			authHeader := r.Header.Get("Authorization")
-			if authHeader == "" {
+			if authService == nil {
+				response.JSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+				return
+			}
+
+			token, fromCookie := bearerOrCookie(r)
+			if token == "" {
 				response.JSON(w, http.StatusUnauthorized, map[string]string{"error": "missing authorization header"})
 				return
 			}
 
-			parts := strings.SplitN(authHeader, " ", 2)
-			if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
-				response.JSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid authorization format"})
+			if fromCookie && !isSafeMethod(r.Method) && !OriginAllowed(r, allowedOrigins) {
+				response.JSON(w, http.StatusForbidden, map[string]string{"error": "invalid request origin"})
 				return
 			}
 
-			claims, err := authService.ValidateToken(r.Context(), parts[1])
+			claims, err := authService.ValidateToken(r.Context(), token)
 			if err != nil {
 				response.JSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
 				return
 			}
 
-			// Inject claims into context
 			ctx := r.Context()
 			ctx = context.WithValue(ctx, ContextKeyClaims, claims)
 			ctx = context.WithValue(ctx, ContextKeyUserID, claims.UserID)
@@ -51,7 +58,6 @@ func JWTAuth(authService service.AuthService) func(http.Handler) http.Handler {
 			ctx = context.WithValue(ctx, ContextKeyOrganizationID, claims.OrganizationID)
 			ctx = context.WithValue(ctx, ContextKeyPermissions, claims.Permissions)
 
-			// Also populate logger context
 			ctx = logger.ContextWithUserID(ctx, claims.UserID.String())
 			if claims.OrganizationID != uuid.Nil {
 				ctx = logger.ContextWithOrganizationID(ctx, claims.OrganizationID.String())
@@ -60,6 +66,47 @@ func JWTAuth(authService service.AuthService) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+func bearerOrCookie(r *http.Request) (token string, fromCookie bool) {
+	header := r.Header.Get("Authorization")
+	const prefix = "Bearer "
+	if len(header) > len(prefix) && strings.EqualFold(header[:len(prefix)], prefix) {
+		return strings.TrimSpace(header[len(prefix):]), false
+	}
+	if c, err := r.Cookie("yuvmi_access"); err == nil && c.Value != "" {
+		return c.Value, true
+	}
+	return "", false
+}
+
+func isSafeMethod(method string) bool {
+	switch strings.ToUpper(method) {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return true
+	default:
+		return false
+	}
+}
+
+func OriginAllowed(r *http.Request, origins []string) bool {
+	origin := strings.TrimSpace(r.Header.Get("Origin"))
+	if origin == "" {
+		if ref := strings.TrimSpace(r.Header.Get("Referer")); ref != "" {
+			if u, err := url.Parse(ref); err == nil {
+				origin = u.Scheme + "://" + u.Host
+			}
+		}
+	}
+	if origin == "" {
+		return false
+	}
+	for _, allowed := range origins {
+		if allowed != "" && strings.EqualFold(allowed, origin) {
+			return true
+		}
+	}
+	return false
 }
 
 // RequirePermission is middleware that checks if the authenticated user has a specific permission.

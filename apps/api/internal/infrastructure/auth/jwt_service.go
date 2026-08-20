@@ -48,6 +48,11 @@ func (s *JWTService) RefreshExpiration() time.Duration {
 	return time.Duration(s.refreshDays) * 24 * time.Hour
 }
 
+// AccessExpiration returns the configured access token lifetime.
+func (s *JWTService) AccessExpiration() time.Duration {
+	return s.expiration
+}
+
 // customClaims extends JWT standard claims with our domain data.
 type customClaims struct {
 	jwt.RegisteredClaims

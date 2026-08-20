@@ -45,12 +45,13 @@ func (t *TokenIssuer) Issue(ctx context.Context, user *model.User) (*dto.AuthTok
 		Token:        access,
 		RefreshToken: refresh,
 		User: dto.UserInfo{
-			ID:        user.ID,
-			Email:     user.Email,
-			FirstName: user.FirstName,
-			LastName:  user.LastName,
-			Status:    string(user.Status),
-			CreatedAt: user.CreatedAt,
+			ID:            user.ID,
+			Email:         user.Email,
+			FirstName:     user.FirstName,
+			LastName:      user.LastName,
+			EmailVerified: user.EmailVerified,
+			Status:        string(user.Status),
+			CreatedAt:     user.CreatedAt,
 		},
 	}, nil
 }

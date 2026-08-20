@@ -51,6 +51,7 @@ export function LoginView() {
       mode,
     });
     if (!result.ok) setError(result.message ?? "Giriş yapılamadı.");
+    else if (result.needsVerification) setInfo(result.message ?? "E-postandaki bağlantı ile hesabını doğrula.");
     setLoading(false);
   }
 

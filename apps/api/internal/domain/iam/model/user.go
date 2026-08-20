@@ -24,6 +24,7 @@ type User struct {
 	LastName        string     `json:"last_name"`
 	AuthProvider    string     `json:"auth_provider,omitempty"`
 	ProviderSubject string     `json:"provider_subject,omitempty"`
+	EmailVerified   bool       `json:"email_verified"`
 	Status          UserStatus `json:"status"`
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`

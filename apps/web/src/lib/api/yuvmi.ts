@@ -36,10 +36,10 @@ export async function loginUser(email: string, password: string) {
   });
 }
 
-export async function refreshAuthToken(refreshToken: string) {
+export async function refreshAuthToken(refreshToken?: string) {
   return apiRequest<LoginResponse>("/api/v1/auth/refresh", {
     method: "POST",
-    body: { refresh_token: refreshToken },
+    body: refreshToken ? { refresh_token: refreshToken } : {},
   });
 }
 
@@ -54,6 +54,27 @@ export async function resetPassword(token: string, newPassword: string) {
   return apiRequest<{ message: string }>("/api/v1/auth/reset-password", {
     method: "POST",
     body: { token, new_password: newPassword },
+  });
+}
+
+export async function verifyEmail(token: string) {
+  return apiRequest<{ message: string }>("/api/v1/auth/verify-email", {
+    method: "POST",
+    body: { token },
+  });
+}
+
+export async function resendVerification(email: string) {
+  return apiRequest<{ message: string }>("/api/v1/auth/resend-verification", {
+    method: "POST",
+    body: { email },
+  });
+}
+
+export async function logoutUser() {
+  return apiRequest<void>("/api/v1/auth/logout", {
+    method: "POST",
+    body: {},
   });
 }
 
