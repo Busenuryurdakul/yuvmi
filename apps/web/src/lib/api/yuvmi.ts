@@ -50,6 +50,21 @@ export async function forgotPassword(email: string) {
   });
 }
 
+export async function resetPassword(token: string, newPassword: string) {
+  return apiRequest<{ message: string }>("/api/v1/auth/reset-password", {
+    method: "POST",
+    body: { token, new_password: newPassword },
+  });
+}
+
+export async function deleteAccount(token: string, password?: string) {
+  return apiRequest<void>("/api/v1/me/account", {
+    method: "DELETE",
+    token,
+    body: password ? { password } : {},
+  });
+}
+
 export async function fetchMe(token: string) {
   return apiRequest<UserProfileResponse>("/api/v1/me", { token });
 }

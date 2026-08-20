@@ -1,6 +1,7 @@
 export const APP_LOGIN_PATH = "/app/login";
 export const APP_ONBOARDING_PATH = "/app/onboarding";
 export const APP_HOME_PATH = "/app";
+export const RESET_PASSWORD_PATH = "/reset-password";
 
 export type AppAuthSnapshot = {
   isLoading: boolean;
