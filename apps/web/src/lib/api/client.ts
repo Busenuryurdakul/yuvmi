@@ -58,7 +58,7 @@ function parsePayload(text: string): Record<string, unknown> {
 
 async function refreshSession(refreshToken: string): Promise<LoginResponse> {
   const baseUrl = getApiBaseUrl();
-  if (!baseUrl) {
+  if (baseUrl === null) {
     throw new ApiError("API adresi yapılandırılmamış (NEXT_PUBLIC_API_BASE_URL).", 0);
   }
 
@@ -86,7 +86,7 @@ async function requestWithRefresh<T>(
   retried: boolean,
 ): Promise<T> {
   const baseUrl = getApiBaseUrl();
-  if (!baseUrl) {
+  if (baseUrl === null) {
     throw new ApiError("API adresi yapılandırılmamış (NEXT_PUBLIC_API_BASE_URL).", 0);
   }
 

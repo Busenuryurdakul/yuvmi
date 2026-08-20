@@ -60,7 +60,7 @@ export async function submitWaitlistSignup(
   consent: boolean,
 ): Promise<WaitlistSignupResult> {
   const baseUrl = getApiBaseUrl();
-  if (!baseUrl) {
+  if (baseUrl === null) {
     throw new WaitlistError(
       "CONFIGURATION",
       "Erken erişim kaydı şu anda kullanılamıyor.",
