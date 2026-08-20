@@ -19,6 +19,10 @@ Backend (Go) henüz kurulmadı — bkz. [`docs/ARCHITECTURE.md`](./docs/ARCHITEC
 | Dosya | İçerik |
 |-------|--------|
 | [`docs/PRODUCT.md`](./docs/PRODUCT.md) | Ürün vizyonu, MVP, premium, rakipler |
+| [`docs/IA.md`](./docs/IA.md) | Uygulama bilgi mimarisi (güncel; PRD §06–08 v1 arşiv) |
+| [`docs/PRD.md`](./docs/PRD.md) | Tam UX/UI/veri mimarisi (AI hariç MVP) |
+| [`docs/PRD-AI.md`](./docs/PRD-AI.md) | AI fazı gereksinimleri (sonra) |
+| [`docs/INSA-PLANI.md`](./docs/INSA-PLANI.md) | Faz bazlı inşa planı ve mevcut durum |
 | [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | Backend ihtiyaçları, Go yönü |
 | [`docs/COLLABORATION.md`](./docs/COLLABORATION.md) | Branch, PR ve ekip akışı (2 kişi) |
 
@@ -30,9 +34,11 @@ Branch adlandırma, PR kuralları ve review süreci için [`docs/COLLABORATION.m
 
 ## Başlangıç
 
+Gereksinim: Node.js 20 veya üzeri.
+
 ```bash
 # Bağımlılıkları yükle
-npm install
+npm ci
 
 # Web geliştirme sunucusu
 npm run dev:web

@@ -1,0 +1,571 @@
+package usecase
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"time"
+
+	"github.com/google/uuid"
+	iamRepo "github.com/masterfabric-go/masterfabric/internal/domain/iam/repository"
+	domainErr "github.com/masterfabric-go/masterfabric/internal/shared/errors"
+	"github.com/masterfabric-go/masterfabric/internal/application/yuvmi/dto"
+	"github.com/masterfabric-go/masterfabric/internal/domain/alignment"
+	fsmodel "github.com/masterfabric-go/masterfabric/internal/domain/futureself/model"
+	fsRepo "github.com/masterfabric-go/masterfabric/internal/domain/futureself/repository"
+	goalmodel "github.com/masterfabric-go/masterfabric/internal/domain/goal/model"
+	goalRepo "github.com/masterfabric-go/masterfabric/internal/domain/goal/repository"
+	"github.com/masterfabric-go/masterfabric/internal/domain/profile/model"
+	profileRepo "github.com/masterfabric-go/masterfabric/internal/domain/profile/repository"
+	assetRepo "github.com/masterfabric-go/masterfabric/internal/domain/asset/repository"
+	spaceRepo "github.com/masterfabric-go/masterfabric/internal/domain/space/repository"
+	subRepo "github.com/masterfabric-go/masterfabric/internal/domain/subscription/repository"
+	infraNotify "github.com/masterfabric-go/masterfabric/internal/infrastructure/notification"
+	"github.com/masterfabric-go/masterfabric/internal/infrastructure/storage"
+	"github.com/masterfabric-go/masterfabric/internal/shared/config"
+	infraStripe "github.com/masterfabric-go/masterfabric/internal/infrastructure/payment/stripe"
+)
+
+type Service struct {
+	users         iamRepo.UserRepository
+	profiles      profileRepo.ProfileRepository
+	futureSelf    fsRepo.FutureSelfRepository
+	goals         goalRepo.GoalRepository
+	plans         goalRepo.PlanRepository
+	tasks         goalRepo.TaskRepository
+	checkins      profileRepo.CheckinRepository
+	alignment     profileRepo.AlignmentRepository
+	reviews       goalRepo.WeeklyReviewRepository
+	notifications profileRepo.NotificationRepository
+	spaces        spaceRepo.SpaceRepository
+	assets        assetRepo.AssetRepository
+	subscriptions subRepo.SubscriptionRepository
+	storage       storage.ObjectStorage
+	engine        *alignment.Engine
+	push          *infraNotify.ExpoPushClient
+	yuvmiCfg      config.YuvmiConfig
+	stripe        *infraStripe.Client
+}
+
+// Deps holds every dependency Service needs. Grouping them into a struct
+// avoids a long positional parameter list where several arguments share the
+// same shape (the *Repository interfaces) and are easy to transpose by
+// mistake.
+type Deps struct {
+	Users         iamRepo.UserRepository
+	Profiles      profileRepo.ProfileRepository
+	FutureSelf    fsRepo.FutureSelfRepository
+	Goals         goalRepo.GoalRepository
+	Plans         goalRepo.PlanRepository
+	Tasks         goalRepo.TaskRepository
+	Checkins      profileRepo.CheckinRepository
+	Alignment     profileRepo.AlignmentRepository
+	Reviews       goalRepo.WeeklyReviewRepository
+	Notifications profileRepo.NotificationRepository
+	Spaces        spaceRepo.SpaceRepository
+	Assets        assetRepo.AssetRepository
+	Subscriptions subRepo.SubscriptionRepository
+	Storage       storage.ObjectStorage
+	Engine        *alignment.Engine
+	Push          *infraNotify.ExpoPushClient
+	YuvmiCfg      config.YuvmiConfig
+}
+
+func NewService(deps Deps) *Service {
+	svc := &Service{
+		users: deps.Users, profiles: deps.Profiles,
+		futureSelf: deps.FutureSelf, goals: deps.Goals, plans: deps.Plans, tasks: deps.Tasks,
+		checkins: deps.Checkins, alignment: deps.Alignment, reviews: deps.Reviews,
+		notifications: deps.Notifications, spaces: deps.Spaces, assets: deps.Assets,
+		subscriptions: deps.Subscriptions, storage: deps.Storage, engine: deps.Engine, push: deps.Push,
+		yuvmiCfg: deps.YuvmiCfg,
+	}
+	if deps.YuvmiCfg.Stripe.Enabled() {
+		svc.stripe = infraStripe.NewClient(deps.YuvmiCfg.Stripe.SecretKey, deps.YuvmiCfg.Stripe.WebhookSecret)
+	}
+	return svc
+}
+
+func (s *Service) GetMe(ctx context.Context, userID uuid.UUID) (*dto.UserProfileResponse, error) {
+	user, err := s.users.GetByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	profile, err := s.profiles.GetByUserID(ctx, userID)
+	if err != nil {
+		displayName := user.FullName()
+		_ = s.profiles.EnsureDefault(ctx, userID, displayName)
+		profile = &model.UserProfile{
+			UserID: userID, DisplayName: displayName, Locale: "tr", Timezone: "Europe/Istanbul",
+		}
+	}
+	resp := &dto.UserProfileResponse{
+		ID: userID, Email: user.Email, DisplayName: profile.DisplayName,
+		AvatarURL: profile.AvatarURL, Locale: profile.Locale, Timezone: profile.Timezone,
+		OnboardingComplete: profile.OnboardingComplete, CreatedAt: user.CreatedAt,
+	}
+	// The balance lives on users, not user_profiles, so it has to be read
+	// separately. A failure here leaves the field omitted rather than
+	// failing the whole profile fetch.
+	if balance, err := s.users.GetPearlBalance(ctx, userID); err == nil {
+		resp.PearlBalance = &balance
+	} else {
+		slog.ErrorContext(ctx, "get pearl balance for profile failed", "user_id", userID, "error", err)
+	}
+	return resp, nil
+}
+
+func (s *Service) UpdateMe(ctx context.Context, userID uuid.UUID, req dto.UpdateProfileRequest) (*dto.UserProfileResponse, error) {
+	profile, err := s.profiles.GetByUserID(ctx, userID)
+	if err != nil {
+		user, uerr := s.users.GetByID(ctx, userID)
+		if uerr != nil {
+			return nil, uerr
+		}
+		profile = &model.UserProfile{UserID: userID, DisplayName: user.FullName(), Locale: "tr", Timezone: "Europe/Istanbul"}
+	}
+	if req.DisplayName != nil {
+		profile.DisplayName = *req.DisplayName
+	}
+	if req.AvatarURL != nil {
+		profile.AvatarURL = req.AvatarURL
+	}
+	if req.Locale != nil {
+		profile.Locale = *req.Locale
+	}
+	if req.Timezone != nil {
+		profile.Timezone = *req.Timezone
+	}
+	if err := s.profiles.Upsert(ctx, profile); err != nil {
+		return nil, err
+	}
+	return s.GetMe(ctx, userID)
+}
+
+func (s *Service) CreateFutureSelf(ctx context.Context, userID uuid.UUID, req dto.CreateFutureSelfRequest) (*dto.FutureSelfResponse, error) {
+	existing, err := s.futureSelf.GetByUserID(ctx, userID)
+	if err != nil && !errors.Is(err, domainErr.ErrNotFound) {
+		return nil, err
+	}
+	if existing != nil {
+		return nil, domainErr.New(domainErr.ErrAlreadyExists, "future self already exists", nil)
+	}
+	fs := &fsmodel.FutureSelf{
+		UserID: userID, Title: req.Title, Description: req.Description,
+		Domains: req.Domains, Affirmations: req.Affirmations, Status: fsmodel.FutureSelfDraft,
+	}
+	for _, v := range req.VisionItems {
+		fs.VisionItems = append(fs.VisionItems, fsmodel.VisionItem{
+			Domain: v.Domain, Title: v.Title, ImageURL: v.ImageURL, Note: v.Note, SortOrder: v.SortOrder,
+		})
+	}
+	if err := s.futureSelf.Create(ctx, fs); err != nil {
+		return nil, err
+	}
+	return toFutureSelfResponse(fs), nil
+}
+
+func (s *Service) GetFutureSelf(ctx context.Context, userID uuid.UUID) (*dto.FutureSelfResponse, error) {
+	fs, err := s.futureSelf.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return toFutureSelfResponse(fs), nil
+}
+
+func (s *Service) UpdateFutureSelf(ctx context.Context, userID uuid.UUID, req dto.CreateFutureSelfRequest) (*dto.FutureSelfResponse, error) {
+	fs, err := s.futureSelf.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if fs.Status != fsmodel.FutureSelfDraft {
+		return nil, domainErr.New(domainErr.ErrForbidden, "approved profile cannot be edited", nil)
+	}
+	fs.Title = req.Title
+	fs.Description = req.Description
+	fs.Domains = req.Domains
+	fs.Affirmations = req.Affirmations
+	fs.VisionItems = nil
+	for _, v := range req.VisionItems {
+		fs.VisionItems = append(fs.VisionItems, fsmodel.VisionItem{
+			Domain: v.Domain, Title: v.Title, ImageURL: v.ImageURL, Note: v.Note, SortOrder: v.SortOrder,
+		})
+	}
+	if err := s.futureSelf.Update(ctx, fs); err != nil {
+		return nil, err
+	}
+	return toFutureSelfResponse(fs), nil
+}
+
+func (s *Service) ApproveFutureSelf(ctx context.Context, userID uuid.UUID) (*dto.FutureSelfResponse, error) {
+	if err := s.futureSelf.Approve(ctx, userID); err != nil {
+		return nil, err
+	}
+	return s.GetFutureSelf(ctx, userID)
+}
+
+func (s *Service) CreateGoal(ctx context.Context, userID uuid.UUID, req dto.CreateGoalRequest) (*dto.GoalResponse, error) {
+	if err := s.checkGoalLimit(ctx, userID); err != nil {
+		return nil, err
+	}
+	goal := &goalmodel.Goal{
+		UserID: userID, FutureSelfID: req.FutureSelfID,
+		Title: req.Title, Description: req.Description, Status: goalmodel.GoalDraft,
+	}
+	if req.TargetDate != nil {
+		t, err := dto.ParseDate(*req.TargetDate)
+		if err != nil {
+			return nil, domainErr.New(domainErr.ErrValidation, "invalid targetDate", err)
+		}
+		goal.TargetDate = &t
+	}
+	if err := s.goals.Create(ctx, goal); err != nil {
+		return nil, err
+	}
+	return toGoalResponse(goal), nil
+}
+
+func (s *Service) GetActiveGoal(ctx context.Context, userID uuid.UUID) (*dto.GoalResponse, error) {
+	goal, err := s.goals.GetActiveByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return toGoalResponse(goal), nil
+}
+
+func (s *Service) GetCurrentGoal(ctx context.Context, userID uuid.UUID) (*dto.GoalResponse, error) {
+	goal, err := s.goals.GetLatestByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return toGoalResponse(goal), nil
+}
+
+func (s *Service) UpdateGoal(ctx context.Context, userID uuid.UUID, req dto.CreateGoalRequest) (*dto.GoalResponse, error) {
+	goal, err := s.goals.GetLatestByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	goal.FutureSelfID = req.FutureSelfID
+	goal.Title = req.Title
+	goal.Description = req.Description
+	goal.TargetDate = nil
+	if req.TargetDate != nil {
+		t, err := dto.ParseDate(*req.TargetDate)
+		if err != nil {
+			return nil, domainErr.New(domainErr.ErrValidation, "invalid targetDate", err)
+		}
+		goal.TargetDate = &t
+	}
+	if err := s.goals.Update(ctx, goal); err != nil {
+		return nil, err
+	}
+	return toGoalResponse(goal), nil
+}
+
+func (s *Service) ActivateGoal(ctx context.Context, userID, goalID uuid.UUID) (*dto.GoalResponse, error) {
+	if err := s.goals.Activate(ctx, userID, goalID); err != nil {
+		return nil, err
+	}
+	goal, err := s.goals.GetByID(ctx, userID, goalID)
+	if err != nil {
+		return nil, err
+	}
+	return toGoalResponse(goal), nil
+}
+
+func (s *Service) CreatePlan(ctx context.Context, userID uuid.UUID, req dto.CreatePlanRequest) (*dto.PlanResponse, error) {
+	plan := &goalmodel.Plan{
+		UserID: userID, GoalID: req.GoalID, Title: req.Title,
+		Description: req.Description, Status: goalmodel.PlanDraft, Version: 1,
+	}
+	for _, step := range req.Steps {
+		plan.Steps = append(plan.Steps, goalmodel.PlanStep{
+			DayOffset: step.DayOffset, Title: step.Title, Description: step.Description, SortOrder: step.SortOrder,
+		})
+	}
+	if err := s.plans.Create(ctx, plan); err != nil {
+		return nil, err
+	}
+	return toPlanResponse(plan), nil
+}
+
+func (s *Service) GetActivePlan(ctx context.Context, userID uuid.UUID) (*dto.PlanResponse, error) {
+	plan, err := s.plans.GetActiveByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return toPlanResponse(plan), nil
+}
+
+func (s *Service) ActivatePlan(ctx context.Context, userID, planID uuid.UUID) (*dto.PlanResponse, error) {
+	plan, err := s.plans.GetByID(ctx, userID, planID)
+	if err != nil {
+		return nil, err
+	}
+
+	today := todayUTC()
+	step := firstStepForDay(plan, 0)
+	task := &goalmodel.DailyTask{
+		UserID: userID, PlanID: plan.ID, Date: today,
+		Title: step.Title, Description: step.Description, Status: goalmodel.TaskPending,
+	}
+
+	if err := s.plans.ActivatePlanTx(ctx, userID, planID, plan.GoalID, task); err != nil {
+		return nil, err
+	}
+
+	if err := s.profiles.SetOnboardingComplete(ctx, userID); err != nil {
+		return nil, fmt.Errorf("set onboarding complete: %w", err)
+	}
+
+	plan, err = s.plans.GetByID(ctx, userID, planID)
+	if err != nil {
+		return nil, err
+	}
+	return toPlanResponse(plan), nil
+}
+
+func (s *Service) GetTodayTask(ctx context.Context, userID uuid.UUID) (*dto.DailyTaskResponse, error) {
+	task, err := s.tasks.GetByDate(ctx, userID, todayUTC())
+	if err != nil {
+		return nil, err
+	}
+	return toTaskResponse(task), nil
+}
+
+func (s *Service) CompleteTask(ctx context.Context, userID, taskID uuid.UUID) (*dto.DailyTaskResponse, error) {
+	transitioned, err := s.tasks.Complete(ctx, userID, taskID)
+	if err != nil {
+		return nil, err
+	}
+	task, err := s.tasks.GetByID(ctx, userID, taskID)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.engine.Recalculate(ctx, userID, todayUTC()); err != nil {
+		slog.ErrorContext(ctx, "recalculate alignment after task complete failed", "user_id", userID, "error", err)
+	}
+	resp := toTaskResponse(task)
+	if transitioned {
+		if balance, err := s.users.AwardPearls(ctx, userID, pearlReasonTaskComplete, pearlAmountTaskComplete); err == nil {
+			resp.PearlBalance = &balance
+		}
+	}
+	return resp, nil
+}
+
+func (s *Service) SkipTask(ctx context.Context, userID, taskID uuid.UUID, reason *string) (*dto.DailyTaskResponse, error) {
+	if err := s.tasks.Skip(ctx, userID, taskID, reason); err != nil {
+		return nil, err
+	}
+	task, err := s.tasks.GetByID(ctx, userID, taskID)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.engine.Recalculate(ctx, userID, todayUTC()); err != nil {
+		slog.ErrorContext(ctx, "recalculate alignment after task skip failed", "user_id", userID, "error", err)
+	}
+	return toTaskResponse(task), nil
+}
+
+// --- İnci (pearl) economy ---
+
+const (
+	pearlReasonTaskComplete       = "task_complete"
+	pearlReasonNotificationDesign = "notification_design_confirm"
+	pearlReasonWaveSurvived       = "wave_survived"
+
+	pearlAmountTaskComplete       = 2
+	pearlAmountNotificationDesign = 3
+	pearlAmountWaveSurvived       = 1
+
+	pearlDailyCapNotificationDesign = 3
+	pearlDailyCapWaveSurvived       = 10
+)
+
+func (s *Service) GetPearlBalance(ctx context.Context, userID uuid.UUID) (*dto.PearlBalanceResponse, error) {
+	balance, err := s.users.GetPearlBalance(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return &dto.PearlBalanceResponse{Balance: balance}, nil
+}
+
+// SpendPearls deducts the cost of a cosmetic purchase. The item name rides
+// along into the ledger so a spend can be traced back to what was bought;
+// reason is capped to the column width.
+func (s *Service) SpendPearls(ctx context.Context, userID uuid.UUID, req dto.SpendPearlsRequest) (*dto.SpendPearlsResponse, error) {
+	reason := "shop:" + req.Item
+	if len(reason) > 64 {
+		reason = reason[:64]
+	}
+	balance, spent, err := s.users.SpendPearls(ctx, userID, reason, req.Amount)
+	if err != nil {
+		return nil, err
+	}
+	return &dto.SpendPearlsResponse{Balance: balance, Spent: spent}, nil
+}
+
+// awardPearlsWithDailyCap grants a pearl award unless the reason has already
+// been awarded dailyCap times today (UTC), in which case it's a no-op that
+// still returns the current balance. The check-and-award is atomic at the
+// repository layer so concurrent requests can't both slip past the cap.
+func (s *Service) awardPearlsWithDailyCap(ctx context.Context, userID uuid.UUID, reason string, amount, dailyCap int) (int, bool, error) {
+	since := time.Now().UTC().Truncate(24 * time.Hour)
+	return s.users.AwardPearlsIfUnderDailyCap(ctx, userID, reason, amount, dailyCap, since)
+}
+
+// ConfirmNotificationDesign awards pearls when the user designs and confirms
+// a notification, capped per day since the same reason can be triggered
+// repeatedly (multiple notification types).
+func (s *Service) ConfirmNotificationDesign(ctx context.Context, userID uuid.UUID) (*dto.PearlAwardResponse, error) {
+	balance, awarded, err := s.awardPearlsWithDailyCap(ctx, userID, pearlReasonNotificationDesign, pearlAmountNotificationDesign, pearlDailyCapNotificationDesign)
+	if err != nil {
+		return nil, err
+	}
+	return &dto.PearlAwardResponse{Balance: balance, Awarded: awarded}, nil
+}
+
+// RecordWaveSurvived awards pearls when the user surfs an urge/wave
+// ("dalga atlatma"), capped per day to prevent trivial spam.
+func (s *Service) RecordWaveSurvived(ctx context.Context, userID uuid.UUID) (*dto.PearlAwardResponse, error) {
+	balance, awarded, err := s.awardPearlsWithDailyCap(ctx, userID, pearlReasonWaveSurvived, pearlAmountWaveSurvived, pearlDailyCapWaveSurvived)
+	if err != nil {
+		return nil, err
+	}
+	return &dto.PearlAwardResponse{Balance: balance, Awarded: awarded}, nil
+}
+
+func (s *Service) GetTodayCheckin(ctx context.Context, userID uuid.UUID) (*dto.CheckinResponse, error) {
+	entry, err := s.checkins.GetByDate(ctx, userID, todayUTC())
+	if err != nil {
+		return nil, err
+	}
+	return toCheckinResponse(entry), nil
+}
+
+func (s *Service) UpsertCheckin(ctx context.Context, userID uuid.UUID, req dto.UpsertCheckinRequest) (*dto.CheckinResponse, error) {
+	entry := &model.TodayEntry{
+		UserID: userID, Date: todayUTC(), Mood: req.Mood, Energy: req.Energy,
+		Gratitude: req.Gratitude, Reflection: req.Reflection, DomainScores: req.DomainScores,
+	}
+	if err := s.checkins.Upsert(ctx, entry); err != nil {
+		return nil, err
+	}
+	saved, err := s.checkins.GetByDate(ctx, userID, todayUTC())
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.engine.Recalculate(ctx, userID, todayUTC()); err != nil {
+		slog.ErrorContext(ctx, "recalculate alignment after checkin upsert failed", "user_id", userID, "error", err)
+	}
+	return toCheckinResponse(saved), nil
+}
+
+func (s *Service) GetTodayAlignment(ctx context.Context, userID uuid.UUID) (*dto.AlignmentResponse, error) {
+	today := todayUTC()
+	snap, err := s.alignment.GetByDate(ctx, userID, today)
+	if err != nil {
+		return s.recalcAndReturn(ctx, userID, today)
+	}
+	return toAlignmentResponse(snap), nil
+}
+
+func (s *Service) GetAlignmentHistory(ctx context.Context, userID uuid.UUID) ([]dto.AlignmentResponse, error) {
+	snaps, err := s.alignment.ListHistory(ctx, userID, 30)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]dto.AlignmentResponse, len(snaps))
+	for i, snap := range snaps {
+		out[i] = *toAlignmentResponse(snap)
+	}
+	return out, nil
+}
+
+func (s *Service) recalcAndReturn(ctx context.Context, userID uuid.UUID, date time.Time) (*dto.AlignmentResponse, error) {
+	snap, err := s.engine.Recalculate(ctx, userID, date)
+	if err != nil {
+		return nil, err
+	}
+	return toAlignmentResponse(snap), nil
+}
+
+func todayUTC() time.Time {
+	now := time.Now().UTC()
+	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+func firstStepForDay(plan *goalmodel.Plan, dayOffset int) goalmodel.PlanStep {
+	for _, step := range plan.Steps {
+		if step.DayOffset == dayOffset {
+			return step
+		}
+	}
+	if len(plan.Steps) > 0 {
+		return plan.Steps[0]
+	}
+	return goalmodel.PlanStep{Title: "Bugünün adımı", Description: "Küçük bir adım at"}
+}
+
+func toFutureSelfResponse(fs *fsmodel.FutureSelf) *dto.FutureSelfResponse {
+	resp := &dto.FutureSelfResponse{
+		ID: fs.ID, Title: fs.Title, Description: fs.Description,
+		Domains: fs.Domains, Affirmations: fs.Affirmations, Status: fs.Status,
+		CreatedAt: fs.CreatedAt, UpdatedAt: fs.UpdatedAt,
+	}
+	for _, v := range fs.VisionItems {
+		resp.VisionItems = append(resp.VisionItems, dto.VisionItemResponse{
+			ID: v.ID, Domain: v.Domain, Title: v.Title, ImageURL: v.ImageURL, Note: v.Note, SortOrder: v.SortOrder,
+		})
+	}
+	return resp
+}
+
+func toGoalResponse(g *goalmodel.Goal) *dto.GoalResponse {
+	resp := &dto.GoalResponse{
+		ID: g.ID, FutureSelfID: g.FutureSelfID, Title: g.Title, Description: g.Description,
+		Status: g.Status, CreatedAt: g.CreatedAt,
+	}
+	if g.TargetDate != nil {
+		s := dto.FormatDate(*g.TargetDate)
+		resp.TargetDate = &s
+	}
+	return resp
+}
+
+func toPlanResponse(p *goalmodel.Plan) *dto.PlanResponse {
+	resp := &dto.PlanResponse{
+		ID: p.ID, GoalID: p.GoalID, Title: p.Title, Description: p.Description,
+		Status: p.Status, Version: p.Version, CreatedAt: p.CreatedAt,
+	}
+	for _, s := range p.Steps {
+		resp.Steps = append(resp.Steps, dto.PlanStepResponse{
+			ID: s.ID, DayOffset: s.DayOffset, Title: s.Title, Description: s.Description, SortOrder: s.SortOrder,
+		})
+	}
+	return resp
+}
+
+func toTaskResponse(t *goalmodel.DailyTask) *dto.DailyTaskResponse {
+	return &dto.DailyTaskResponse{
+		ID: t.ID, PlanID: t.PlanID, Date: dto.FormatDate(t.Date), Title: t.Title,
+		Description: t.Description, Status: t.Status, CompletedAt: t.CompletedAt, SkippedReason: t.SkippedReason,
+	}
+}
+
+func toCheckinResponse(e *model.TodayEntry) *dto.CheckinResponse {
+	return &dto.CheckinResponse{
+		ID: e.ID, Date: dto.FormatDate(e.Date), Mood: e.Mood, Energy: e.Energy,
+		Gratitude: e.Gratitude, Reflection: e.Reflection, DomainScores: e.DomainScores, CreatedAt: e.CreatedAt,
+	}
+}
+
+func toAlignmentResponse(s *model.AlignmentSnapshot) *dto.AlignmentResponse {
+	return &dto.AlignmentResponse{
+		ID: s.ID, Date: dto.FormatDate(s.Date), OverallScore: s.OverallScore,
+		Factors: s.Factors, SummaryExplanation: s.SummaryExplanation, GoalID: s.GoalID, PlanID: s.PlanID,
+	}
+}

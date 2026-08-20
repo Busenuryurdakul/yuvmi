@@ -9,13 +9,15 @@ export type DateTimeString = string;
 
 /** Life domains the user tracks */
 export type LifeDomain =
-  | "career"
-  | "relationships"
-  | "health"
-  | "finance"
   | "personal_growth"
-  | "creativity"
+  | "health"
+  | "career"
+  | "finance"
+  | "relationships"
+  | "learning"
   | "peace"
+  | "creativity"
+  /** @deprecated Eski kayıtlar — seçicide gösterilmez */
   | "freedom";
 
 /** Mood / energy level for daily check-ins */

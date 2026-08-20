@@ -10,15 +10,28 @@ export const LIFE_DOMAINS: Record<
   LifeDomain,
   { label: { tr: string; en: string }; emoji: string }
 > = {
-  career: { label: { tr: "Kariyer", en: "Career" }, emoji: "💼" },
-  relationships: { label: { tr: "İlişkiler", en: "Relationships" }, emoji: "💕" },
-  health: { label: { tr: "Sağlık", en: "Health" }, emoji: "🌿" },
-  finance: { label: { tr: "Finans", en: "Finance" }, emoji: "💰" },
   personal_growth: { label: { tr: "Kişisel Gelişim", en: "Personal Growth" }, emoji: "🌱" },
+  health: { label: { tr: "Sağlık & Enerji", en: "Health & Energy" }, emoji: "🌿" },
+  career: { label: { tr: "Kariyer", en: "Career" }, emoji: "💼" },
+  finance: { label: { tr: "Finans", en: "Finance" }, emoji: "💰" },
+  relationships: { label: { tr: "İlişkiler", en: "Relationships" }, emoji: "💕" },
+  learning: { label: { tr: "Öğrenme & Beceri", en: "Learning & Skills" }, emoji: "📚" },
+  peace: { label: { tr: "Zihin & Huzur", en: "Mind & Peace" }, emoji: "🕊️" },
   creativity: { label: { tr: "Yaratıcılık", en: "Creativity" }, emoji: "🎨" },
-  peace: { label: { tr: "Huzur", en: "Peace" }, emoji: "🕊️" },
   freedom: { label: { tr: "Özgürlük", en: "Freedom" }, emoji: "✨" },
 };
+
+/** Onboarding seçicide gösterilen sıra — en çok seçilenler önce */
+export const LIFE_DOMAIN_ORDER: LifeDomain[] = [
+  "personal_growth",
+  "health",
+  "career",
+  "finance",
+  "relationships",
+  "learning",
+  "peace",
+  "creativity",
+];
 
 export const SPACE_TYPES: Record<
   SpaceType,
@@ -56,13 +69,11 @@ export const SPACE_TYPES: Record<
 
 /** Features available per space type */
 export const SPACE_FEATURES_BY_TYPE: Record<SpaceType, string[]> = {
-  personal: ["shared_vision_board", "dream_journal", "private_notes"],
-  couple: [
-    "shared_vision_board",
-    "compatibility_insights",
-    "joint_affirmations",
-    "progress_comparison",
-  ],
+  personal: ["shared_vision_board", "private_notes"],
+  couple: ["shared_vision_board", "joint_affirmations", "progress_comparison"],
   friends: ["progress_comparison", "joint_affirmations"],
   family: ["shared_vision_board", "progress_comparison"],
 };
+
+export { PLAN_TEMPLATES, getRecommendedPlanTemplates, isCannedPlanTitle, isCannedPlanStepTitle, isCannedPlanStep } from "./plan-templates";
+export type { PlanTemplate, PlanTemplateStep } from "./plan-templates";

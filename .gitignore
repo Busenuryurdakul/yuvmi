@@ -24,6 +24,10 @@ expo-env.d.ts
 # IDE
 .idea/
 .vscode/
+.claude/
+.cursor/
+.cursor-plugin/
+.gemini/
 *.swp
 *.swo
 
@@ -39,5 +43,9 @@ yarn-error.log*
 # Vercel
 .vercel
 
-# Testing
-coverage/
+# Go
+apps/api/bin/
+.tmp-masterfabric-go/
+
+*.exe
+

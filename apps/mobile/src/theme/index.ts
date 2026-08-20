@@ -1,0 +1,97 @@
+import { radius as sharedRadius, space } from "@yuvmi/shared";
+
+export const theme = {
+  color: {
+    blue: "#2563EB",
+    blueDeep: "#1B4ACB",
+    blueLight: "#7BA3F7",
+    ink: "#0B1220",
+    ink70: "rgba(11,18,32,0.66)",
+    ink50: "rgba(11,18,32,0.50)",
+    ink40: "rgba(11,18,32,0.40)",
+    ink30: "rgba(11,18,32,0.30)",
+    inkRaised: "#1B2438",
+    ink15: "rgba(11,18,32,0.15)",
+    inkLine: "rgba(11,18,32,0.16)",
+    glass: "rgba(255,255,255,0.52)",
+    glass2: "rgba(255,255,255,0.34)",
+    glassSolid: "rgba(255,255,255,0.72)",
+    edge: "rgba(255,255,255,0.72)",
+    mist: "#E7ECF9",
+    veil: "#B9C6E8",
+    paperLine: "rgba(255,255,255,0.72)",
+    onInk: "#FFFFFF",
+    onInkMuted: "rgba(255,255,255,0.72)",
+    danger: "#C2381F",
+    surface: {
+      raised: "rgba(255,255,255,0.52)",
+      sunken: "rgba(255,255,255,0.34)",
+    },
+    text: {
+      primary: "#0B1220",
+      secondary: "rgba(11,18,32,0.66)",
+      tertiary: "rgba(11,18,32,0.40)",
+    },
+    line: {
+      soft: "rgba(11,18,32,0.09)",
+      firm: "rgba(11,18,32,0.16)",
+    },
+  },
+  radius: {
+    ...sharedRadius,
+    xl: 18,
+    sheet: 28,
+    nav: 24,
+  },
+  space,
+  font: {
+    sans: "SchibstedGrotesk_400Regular",
+    sansMedium: "SchibstedGrotesk_500Medium",
+    sansSemibold: "SchibstedGrotesk_600SemiBold",
+    sansBold: "SchibstedGrotesk_700Bold",
+    sansExtra: "SchibstedGrotesk_800ExtraBold",
+    mono: "DMMono_400Regular",
+    monoMedium: "DMMono_500Medium",
+    size: {
+      xs: 10,
+      sm: 13,
+      md: 15,
+      lg: 17,
+      xl: 21,
+      xxl: 28,
+      display: 30,
+    },
+    weight: {
+      regular: "400" as const,
+      medium: "500" as const,
+      semibold: "600" as const,
+      bold: "700" as const,
+      extra: "800" as const,
+    },
+  },
+  shadow: {
+    glass: {
+      shadowColor: "#0B1220",
+      shadowOpacity: 0.09,
+      shadowRadius: 26,
+      shadowOffset: { width: 0, height: 8 },
+      elevation: 6,
+    },
+    nav: {
+      shadowColor: "#0B1220",
+      shadowOpacity: 0.16,
+      shadowRadius: 30,
+      shadowOffset: { width: 0, height: 10 },
+      elevation: 12,
+    },
+    blue: {
+      shadowColor: "#2563EB",
+      shadowOpacity: 0.34,
+      shadowRadius: 20,
+      shadowOffset: { width: 0, height: 8 },
+      elevation: 8,
+    },
+  },
+} as const;
+
+export type Theme = typeof theme;
