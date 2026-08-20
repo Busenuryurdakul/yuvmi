@@ -51,6 +51,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
         <div className="app-top-actions">
           <span className="app-user-name">{user?.displayName}</span>
+          <Link href="/app/settings" className="app-text-btn landing-focus-ring">
+            Ayarlar
+          </Link>
           <button type="button" className="app-text-btn landing-focus-ring" onClick={handleSignOut}>
             Çıkış
           </button>
