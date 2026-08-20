@@ -28,6 +28,8 @@ import type {
 } from "./types";
 import type { ConsentScope, LifeDomain } from "@yuvmi/shared";
 
+export type { CompanionChatTurn };
+
 export async function registerUser(input: {
   email: string;
   password: string;

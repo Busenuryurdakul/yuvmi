@@ -262,6 +262,19 @@ export async function saveRituals(items: RitualDraft[]) {
   await writeJson(KEYS.rituals, items);
 }
 
+export type DailyCard = {
+  date: string;
+  text: string;
+};
+
+export async function loadDailyCard(): Promise<DailyCard | null> {
+  return readJson<DailyCard | null>("yuvmi.daily-card", null);
+}
+
+export async function saveDailyCard(card: DailyCard) {
+  await writeJson("yuvmi.daily-card", card);
+}
+
 export async function loadDeck(): Promise<DeckCard[]> {
   return readJson(KEYS.deck, [
     { id: "1", text: "Bugün kendine karşı nazik ol." },
