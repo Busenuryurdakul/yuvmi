@@ -133,6 +133,7 @@ func New(deps Dependencies) *chi.Mux {
 				r.Get("/me", deps.YuvmiHandler.GetMe)
 				r.Patch("/me", deps.YuvmiHandler.UpdateMe)
 				if deps.IAMHandler != nil {
+					r.Post("/me/change-password", deps.IAMHandler.ChangePassword)
 					r.Delete("/me/account", deps.IAMHandler.DeleteAccount)
 				}
 

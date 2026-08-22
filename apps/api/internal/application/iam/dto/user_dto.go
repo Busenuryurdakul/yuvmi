@@ -64,6 +64,12 @@ type DeleteAccountRequest struct {
 	Password string `json:"password"`
 }
 
+// ChangePasswordRequest updates the authenticated user's password.
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password" validate:"required"`
+	NewPassword     string `json:"new_password" validate:"required,min=8"`
+}
+
 // UserInfo is a public user representation.
 type UserInfo struct {
 	ID        uuid.UUID `json:"id"`

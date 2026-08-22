@@ -24,6 +24,7 @@ type Handler struct {
 	forgotPasswordUC *usecase.ForgotPasswordUseCase
 	resetPasswordUC  *usecase.ResetPasswordUseCase
 	deleteAccountUC  *usecase.DeleteAccountUseCase
+	changePasswordUC *usecase.ChangePasswordUseCase
 	logoutUC         *usecase.LogoutUseCase
 	assignRoleUC     *usecase.AssignRoleUseCase
 	userRepo         iamRepo.UserRepository
@@ -38,6 +39,7 @@ func NewHandler(
 	forgotPasswordUC *usecase.ForgotPasswordUseCase,
 	resetPasswordUC *usecase.ResetPasswordUseCase,
 	deleteAccountUC *usecase.DeleteAccountUseCase,
+	changePasswordUC *usecase.ChangePasswordUseCase,
 	logoutUC *usecase.LogoutUseCase,
 	assignRoleUC *usecase.AssignRoleUseCase,
 	userRepo iamRepo.UserRepository,
@@ -50,6 +52,7 @@ func NewHandler(
 		forgotPasswordUC: forgotPasswordUC,
 		resetPasswordUC:  resetPasswordUC,
 		deleteAccountUC:  deleteAccountUC,
+		changePasswordUC: changePasswordUC,
 		logoutUC:         logoutUC,
 		assignRoleUC:     assignRoleUC,
 		userRepo:         userRepo,
@@ -154,6 +157,28 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, map[string]string{"message": "Password updated."})
+}
+
+// ChangePassword updates the authenticated user's password and revokes all refresh tokens.
+func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		response.JSON(w, http.StatusUnauthorized, map[string]string{"error": "not authenticated"})
+		return
+	}
+
+	var req dto.ChangePasswordRequest
+	if err := validator.DecodeAndValidate(r, &req); err != nil {
+		response.JSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if err := h.changePasswordUC.Execute(r.Context(), userID, req); err != nil {
+		response.Error(w, err)
+		return
+	}
+
+	response.NoContent(w)
 }
 
 // DeleteAccount permanently removes the authenticated user's account.
