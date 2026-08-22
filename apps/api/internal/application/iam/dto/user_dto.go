@@ -32,14 +32,19 @@ type AuthTokenResponse = LoginResponse
 
 // OAuthRequest is the input for OAuth login.
 type OAuthRequest struct {
-	Provider   string `json:"provider" validate:"required,oneof=google apple"`
-	IDToken    string `json:"id_token" validate:"required"`
-	FirstName  string `json:"first_name"`
-	LastName   string `json:"last_name"`
+	Provider  string `json:"provider" validate:"required,oneof=google apple"`
+	IDToken   string `json:"id_token" validate:"required"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
 }
 
 // RefreshRequest is the input for token refresh.
 type RefreshRequest struct {
+	RefreshToken string `json:"refresh_token" validate:"required"`
+}
+
+// LogoutRequest revokes the current refresh token for the authenticated user.
+type LogoutRequest struct {
 	RefreshToken string `json:"refresh_token" validate:"required"`
 }
 
