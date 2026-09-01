@@ -8,6 +8,7 @@ import { ApiError } from "@/lib/api/client";
 import { changePassword, deleteAccount } from "@/lib/api/yuvmi";
 import { validateChangePasswordInput } from "@/lib/auth/change-password-validation";
 import { APP_LOGIN_PASSWORD_CHANGED_PATH } from "@/lib/auth/login-banners";
+import { PASSWORD_CHANGE_REDIRECT_KEY } from "@/lib/auth/app-route";
 import { AppButton, AppCard, AppInput } from "./ui";
 
 export function SettingsView() {
@@ -43,8 +44,25 @@ export function SettingsView() {
     setChangeLoading(true);
     try {
       await changePassword(user.token, currentPassword, newPassword);
-      await signOut({ localOnly: true });
+      sessionStorage.setItem(PASSWORD_CHANGE_REDIRECT_KEY, "1");
       router.replace(APP_LOGIN_PASSWORD_CHANGED_PATH);
+      await new Promise<void>((resolve, reject) => {
+        const started = Date.now();
+        const timer = setInterval(() => {
+          const onSuccessLogin =
+            window.location.pathname === "/app/login" &&
+            window.location.search.includes("passwordChanged=1");
+          if (onSuccessLogin) {
+            clearInterval(timer);
+            resolve();
+          } else if (Date.now() - started > 5000) {
+            clearInterval(timer);
+            reject(new Error("passwordChanged redirect timeout"));
+          }
+        }, 25);
+      });
+      await signOut({ localOnly: true });
+      sessionStorage.removeItem(PASSWORD_CHANGE_REDIRECT_KEY);
     } catch (err) {
       setChangeError(err instanceof ApiError ? err.message : "Şifre değiştirilemedi.");
     } finally {

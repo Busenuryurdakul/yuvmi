@@ -71,6 +71,25 @@ describe("resolveAppDestination — smoke routing", () => {
     );
   });
 
+  it("after onboarding, login success screens stay on login", () => {
+    const user = { onboardingComplete: true };
+    const passwordChanged = new URLSearchParams("passwordChanged=1");
+    const reset = new URLSearchParams("reset=1");
+
+    assert.equal(
+      resolveAppDestination("/app/login", { isLoading: false, user: null }, passwordChanged),
+      null,
+    );
+    assert.equal(
+      resolveAppDestination("/app/login", { isLoading: false, user: null }, reset),
+      null,
+    );
+    assert.equal(
+      resolveAppDestination("/app/login", { isLoading: false, user }, passwordChanged),
+      "/app",
+    );
+  });
+
   it("after onboarding, /app and product pages stay", () => {
     const user = { onboardingComplete: true };
     assert.equal(resolveAppDestination("/app", { isLoading: false, user }), null);

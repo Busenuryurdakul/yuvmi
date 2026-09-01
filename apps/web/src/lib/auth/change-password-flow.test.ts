@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { executeSignOutCore } from "./sign-out-core.ts";
 import { APP_LOGIN_PASSWORD_CHANGED_PATH } from "./login-banners.ts";
+
+const settingsViewSource = readFileSync(
+  new URL("../../components/app/SettingsView.tsx", import.meta.url),
+  "utf8",
+);
 
 describe("change password success flow", () => {
   it("uses localOnly signOut without server revoke", async () => {
@@ -26,6 +32,17 @@ describe("change password success flow", () => {
   });
 
   it("redirect target includes passwordChanged flag", () => {
+    assert.equal(APP_LOGIN_PASSWORD_CHANGED_PATH, "/app/login?passwordChanged=1");
+  });
+
+  it("redirects to login before clearing local session", () => {
+    const changePasswordIdx = settingsViewSource.indexOf("await changePassword(");
+    const replaceIdx = settingsViewSource.indexOf("router.replace(APP_LOGIN_PASSWORD_CHANGED_PATH)");
+    const signOutIdx = settingsViewSource.indexOf("await signOut({ localOnly: true })");
+
+    assert.ok(changePasswordIdx >= 0, "changePassword call missing");
+    assert.ok(replaceIdx > changePasswordIdx, "router.replace must follow changePassword");
+    assert.ok(signOutIdx > replaceIdx, "signOut must follow router.replace");
     assert.equal(APP_LOGIN_PASSWORD_CHANGED_PATH, "/app/login?passwordChanged=1");
   });
 });

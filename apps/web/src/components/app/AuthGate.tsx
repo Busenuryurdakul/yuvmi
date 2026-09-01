@@ -7,6 +7,7 @@ import {
   APP_LOGIN_PATH,
   APP_ONBOARDING_PATH,
   resolveAppDestination,
+  isLoginSuccessScreen,
 } from "@/lib/auth/app-route";
 import { AppLoading } from "./ui";
 import { AppShell } from "./AppShell";
@@ -15,10 +16,18 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, isLoading } = useAuth();
-  const destination = resolveAppDestination(pathname, {
-    isLoading,
-    user: user ? { onboardingComplete: user.onboardingComplete } : null,
-  });
+  const effectivePathname =
+    typeof window !== "undefined" ? window.location.pathname : pathname;
+  const loginSearch =
+    typeof window !== "undefined" ? new URLSearchParams(window.location.search) : undefined;
+  const destination = resolveAppDestination(
+    effectivePathname,
+    {
+      isLoading,
+      user: user ? { onboardingComplete: user.onboardingComplete } : null,
+    },
+    loginSearch,
+  );
 
   useEffect(() => {
     if (destination) router.replace(destination);
@@ -32,7 +41,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!user && pathname !== APP_LOGIN_PATH) {
+  if (!user && effectivePathname !== APP_LOGIN_PATH) {
     return (
       <div className="app-auth-screen">
         <AppLoading label="Girişe yönlendiriliyor…" />
@@ -40,7 +49,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (user && !user.onboardingComplete && pathname !== APP_ONBOARDING_PATH) {
+  if (user && !user.onboardingComplete && effectivePathname !== APP_ONBOARDING_PATH) {
     return (
       <div className="app-auth-screen">
         <AppLoading label="Kuruluma yönlendiriliyor…" />
@@ -48,7 +57,10 @@ export function AuthGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (user?.onboardingComplete && (pathname === APP_LOGIN_PATH || pathname === APP_ONBOARDING_PATH)) {
+  if (user?.onboardingComplete && (effectivePathname === APP_LOGIN_PATH || effectivePathname === APP_ONBOARDING_PATH)) {
+    if (isLoginSuccessScreen(effectivePathname, loginSearch, user)) {
+      return <>{children}</>;
+    }
     return (
       <div className="app-auth-screen">
         <AppLoading label="Uygulamaya yönlendiriliyor…" />
@@ -56,7 +68,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (pathname === APP_LOGIN_PATH || pathname === APP_ONBOARDING_PATH) {
+  if (effectivePathname === APP_LOGIN_PATH || effectivePathname === APP_ONBOARDING_PATH) {
     return <>{children}</>;
   }
 
