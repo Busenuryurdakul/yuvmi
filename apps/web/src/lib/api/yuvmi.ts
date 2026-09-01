@@ -65,6 +65,21 @@ export async function deleteAccount(token: string, password?: string) {
   });
 }
 
+export async function changePassword(
+  accessToken: string,
+  currentPassword: string,
+  newPassword: string,
+) {
+  return apiRequest<void>("/api/v1/me/change-password", {
+    method: "POST",
+    token: accessToken,
+    body: {
+      current_password: currentPassword,
+      new_password: newPassword,
+    },
+  });
+}
+
 export async function logoutUser(accessToken: string, refreshToken: string) {
   return apiRequest<void>("/api/v1/auth/logout", {
     method: "POST",

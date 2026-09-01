@@ -46,7 +46,7 @@ func (s *handlerAuthService) HashRefreshToken(token string) string  { return "ha
 func newLogoutHandler(userID uuid.UUID, repo *handlerLogoutRepo) http.HandlerFunc {
 	auth := &handlerAuthService{userID: userID}
 	logoutUC := usecase.NewLogoutUseCase(auth, repo)
-	h := iamHandler.NewHandler(nil, nil, nil, nil, nil, nil, nil, logoutUC, nil, nil)
+	h := iamHandler.NewHandler(nil, nil, nil, nil, nil, nil, nil, nil, logoutUC, nil, nil)
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), middleware.ContextKeyUserID, userID)
 		h.Logout(w, r.WithContext(ctx))
@@ -92,7 +92,7 @@ func TestLogoutHandler_MissingRefreshToken400(t *testing.T) {
 func TestLogoutHandler_Unauthenticated401(t *testing.T) {
 	auth := &handlerAuthService{userID: uuid.New()}
 	logoutUC := usecase.NewLogoutUseCase(auth, &handlerLogoutRepo{})
-	h := iamHandler.NewHandler(nil, nil, nil, nil, nil, nil, nil, logoutUC, nil, nil)
+	h := iamHandler.NewHandler(nil, nil, nil, nil, nil, nil, nil, nil, logoutUC, nil, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", bytes.NewBufferString(`{"refresh_token":"refresh-a"}`))
 	req.Header.Set("Content-Type", "application/json")

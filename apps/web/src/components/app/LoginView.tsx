@@ -8,12 +8,13 @@ import { YuvmiLogo } from "@/components/manifesto/variants/YuvmiLogo";
 import { useAuth } from "@/context/AuthContext";
 import { isApiConfigured } from "@/lib/api/config";
 import { forgotPassword } from "@/lib/api/yuvmi";
+import { getLoginPasswordUpdatedBanner } from "@/lib/auth/login-banners";
 import { AppButton, AppInput } from "./ui";
 
 export function LoginView() {
   const { signInWithEmail } = useAuth();
   const searchParams = useSearchParams();
-  const resetSuccess = searchParams.get("reset") === "1";
+  const passwordUpdatedBanner = getLoginPasswordUpdatedBanner(searchParams);
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -92,9 +93,9 @@ export function LoginView() {
             API adresi yapılandırılmamış. `NEXT_PUBLIC_API_BASE_URL` gerekli.
           </p>
         ) : null}
-        {resetSuccess ? (
+        {passwordUpdatedBanner ? (
           <p className="app-banner app-banner-ok" role="status">
-            Şifren güncellendi. Yeni şifrenle giriş yapabilirsin.
+            {passwordUpdatedBanner}
           </p>
         ) : null}
 
